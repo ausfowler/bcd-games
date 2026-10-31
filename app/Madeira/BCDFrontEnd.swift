@@ -59,14 +59,25 @@ struct BCDFrontEnd: View {
 
     private var shell: some View {
         VStack(spacing: 0) {
-            if layout != .phonePortrait { topBar }
-            else { portraitTitle }
+            // MCD: the bars sit over the backdrop, never under it (a wide art backdrop covered them in landscape).
+            Group {
+                if layout != .phonePortrait { topBar }
+                else { portraitTitle }
+            }
+            .zIndex(2)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             if layout == .phonePortrait { portraitTabs }
             else if hintBarShown { hintBar }
         }
-        .background { BCDBackdrop() }
+        // MCD: Home's backdrop is the selected game's art behind the whole shell, bars included (Claw Deck).
+        .background {
+            if tab == .home {
+                MCDBackdrop(game: homeGame)
+            } else {
+                BCDBackdrop()
+            }
+        }
         .coordinateSpace(name: BCDFocus.space)
         // The menu reads the focus and the layout from the environment: it sits inside them.
         .modifier(BCDMenuHost(model: cardMenu))
@@ -227,11 +238,18 @@ struct BCDFrontEnd: View {
         .accessibilityLabel("Menu")
     }
 
+    /// The carousel's selected game (Home's backdrop).
+    private var homeGame: BCDGame? {
+        let games = MCDCarouselModel.order(store.games)
+        return games.isEmpty ? nil : games[carousel.index(in: games)]
+    }
+
     private var portraitTitle: some View {
         HStack {
             Text(tab.title).font(BCDStyle.title(30))
             Spacer()
             statusChips
+            menuButton
             settingsButton
         }
         .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 6)

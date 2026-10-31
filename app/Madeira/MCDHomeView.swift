@@ -116,7 +116,6 @@ struct MCDHomeView: View {
             .contentShape(Rectangle())
             .gesture(swipe(games))
         }
-        .background { MCDBackdrop(game: games.isEmpty ? nil : games[model.index(in: games)]) }
     }
 
     private var empty: some View {
@@ -132,7 +131,10 @@ struct MCDHomeView: View {
     @ViewBuilder
     private func carousel(_ games: [BCDGame], selected: Int, size: CGSize) -> some View {
         // Claw Deck: card scale from width, bounded by height (Settings › Display › Carousel size is 100%).
-        let sc = max(min(size.width * 0.273 / 300, size.height * 0.46 / 300), 0.05)
+        // Claw Deck sizes cards min(width * 0.273, height * 0.46) / 300 for a large handheld screen; on a phone that
+        // made them small, so MCD uses more of the screen: 36% of the width in landscape (55% upright), 60% of the height.
+        let portrait = size.height > size.width
+        let sc = max(min(size.width * (portrait ? 0.55 : 0.36) / 300, size.height * 0.60 / 300), 0.05)
         // The finger's travel in cards (0 when the scale is not usable).
         let drag = MCDMath.finite(Double(dragged / (180 * sc)))
         let center = CGPoint(x: size.width / 2, y: size.height * 0.45)
@@ -161,7 +163,7 @@ struct MCDHomeView: View {
             }
             if !model.expanded, games.indices.contains(selected) {
                 caption(games[selected])
-                    .position(x: center.x, y: center.y + 300 * 1.05 * sc / 2 + 44)
+                    .position(x: center.x, y: min(center.y + 300 * 1.05 * sc / 2 + 48, size.height - 40))
                     .transition(.opacity)
             }
         }
@@ -272,24 +274,28 @@ struct MCDCarouselCard: View, Animatable {
                 HStack(alignment: .top, spacing: 26 * s) {
                     fact("Last played", game.lastPlayed.map { BCDFormat.ago($0) } ?? "Never")
                     if let size = game.size { fact(game.state.isInstalled ? "Installed" : "Download", BCDFormat.bytes(size)) }
-                    if game.minutesPlayed > 0 { fact("Played", MCDFormat.minutes(game.minutesPlayed)) }
+                    if game.minutesPlayed > 0 { fact("Played", BCDFormat.playtime(game.minutesPlayed)) }
                 }
-                HStack(spacing: 12 * s) {
-                    Button(action: play) {
-                        Label(game.state.isInstalled ? "Play" : "Install", systemImage: game.state.isInstalled ? "play.fill" : "arrow.down")
-                            .font(BCDStyle.label(19 * s))
-                            .frame(maxWidth: .infinity, minHeight: 46 * s)
-                            .bcdFocusRing(!settingsFocused, cornerRadius: 12 * s)
-                    }
-                    Button(action: settings) {
-                        Label("Settings", systemImage: "gearshape.fill")
-                            .font(BCDStyle.label(19 * s))
-                            .frame(minWidth: 120 * s, minHeight: 46 * s)
-                            .padding(.horizontal, 10 * s)
-                            .background(RoundedRectangle(cornerRadius: 12 * s, style: .continuous).fill(Color.white.opacity(0.06)))
-                            .bcdFocusRing(settingsFocused, cornerRadius: 12 * s)
+                // Claw Deck: Play takes 60% of the row, Settings the rest; neither label can be squeezed.
+                GeometryReader { row in
+                    let gap = 10 * s
+                    HStack(spacing: gap) {
+                        Button(action: play) {
+                            Label(game.state.isInstalled ? "Play" : "Install", systemImage: game.state.isInstalled ? "play.fill" : "arrow.down")
+                                .font(BCDStyle.label(19 * s)).lineLimit(1).minimumScaleFactor(0.6)
+                                .frame(width: max((row.size.width - gap) * 0.6, 1), height: 46 * s)
+                                .bcdFocusRing(!settingsFocused, cornerRadius: 12 * s)
+                        }
+                        Button(action: settings) {
+                            Label("Settings", systemImage: "gearshape.fill")
+                                .font(BCDStyle.label(19 * s)).lineLimit(1).minimumScaleFactor(0.6)
+                                .frame(width: max((row.size.width - gap) * 0.4, 1), height: 46 * s)
+                                .background(RoundedRectangle(cornerRadius: 12 * s, style: .continuous).fill(Color.white.opacity(0.06)))
+                                .bcdFocusRing(settingsFocused, cornerRadius: 12 * s)
+                        }
                     }
                 }
+                .frame(height: 46 * s)
                 .buttonStyle(.plain)
                 .foregroundStyle(.white)
             }
@@ -305,7 +311,7 @@ struct MCDCarouselCard: View, Animatable {
     private func fact(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3 * sc) {
             Text(title).font(BCDStyle.body(14 * sc)).foregroundStyle(BCDStyle.textSoft)
-            Text(value).font(BCDStyle.label(17 * sc)).lineLimit(1)
+            Text(value).font(BCDStyle.label(17 * sc)).lineLimit(1).minimumScaleFactor(0.7)
         }
     }
 }
@@ -316,21 +322,26 @@ struct MCDCarouselCard: View, Animatable {
 struct MCDBackdrop: View {
     let game: BCDGame?
     var body: some View {
-        ZStack {
-            BCDStyle.ink
-            if let game {
-                BCDGameArt(game: game, kind: .hero, showTitle: false)
-                    .scaledToFill()
-                    .blur(radius: 36)
-                    .opacity(0.55)
-                    .id(game.id)
-                    .transition(.opacity)
+        GeometryReader { proxy in
+            ZStack {
+                BCDStyle.ink
+                if let game {
+                    BCDGameArt(game: game, kind: .hero, showTitle: false)
+                        .scaledToFill()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                        .blur(radius: 36)
+                        .opacity(0.55)
+                        .id(game.id)
+                        .transition(.opacity)
+                }
+                LinearGradient(colors: [BCDStyle.ink.opacity(0.35), BCDStyle.ink.opacity(0.15), BCDStyle.ink.opacity(0.85)],
+                               startPoint: .top, endPoint: .bottom)
             }
-            LinearGradient(colors: [BCDStyle.ink.opacity(0.35), BCDStyle.ink.opacity(0.15), BCDStyle.ink.opacity(0.85)],
-                           startPoint: .top, endPoint: .bottom)
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .clipped()
         }
         .animation(.easeInOut(duration: 0.35), value: game?.id)
-        .clipped()
         .ignoresSafeArea()
         .allowsHitTesting(false)
     }
