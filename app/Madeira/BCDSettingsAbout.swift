@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
+// Modified 2026-10-31 (ausfowler/bcd-games): About names Mobile Claw Deck and says it is a fork of BCD.
 
 import SwiftUI
 
@@ -36,7 +37,9 @@ struct BCDAboutSettings<Backend: BCDAboutBackend>: View {
             HStack(spacing: 16) {
                 BCDLogoMark(size: layout == .pad ? 72 : 60)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("BCD").font(BCDStyle.title(layout == .pad ? 32 : 26))
+                    // Mobile Claw Deck (fork ausfowler/bcd-games, 2026-10-31): the app's own name, and where it comes from.
+                    Text("Mobile Claw Deck").font(BCDStyle.title(layout == .pad ? 32 : 26))
+                    Text("A fork of BCD · Includes work from BCD by thebcd69").font(BCDStyle.body(13)).foregroundStyle(BCDStyle.textSoft)
                     // BCD is in alpha (owner, 2026-10-21): said next to the version, as on GitHub's releases.
                     Text("Version \(backend.version) (\(backend.build)) · alpha").font(BCDStyle.label(15)).monospacedDigit()
                     if let stamp = backend.stamp, !stamp.isEmpty {

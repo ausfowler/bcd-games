@@ -20,7 +20,8 @@ from urllib.parse import quote
 # Madeira and Madeira2: they name the build outputs, the bucket objects and the pages.
 VARIANTS = (("Madeira", "com.thebcd69.bcd"),
             ("Madeira2", "com.thebcd69.bcd2"))
-DISPLAY = {"Madeira": "BCD", "Madeira2": "BCD 2"}
+# Mobile Claw Deck (fork, 2026-10-31): the home-screen names; the bundle IDs stay BCD's.
+DISPLAY = {"Madeira": "MCD", "Madeira2": "MCD 2"}
 
 
 def stage_variants(source, output):

@@ -12,7 +12,8 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>BCD</string>
+	<!-- Mobile Claw Deck (fork ausfowler/bcd-games, 2026-10-31); based on BCD by thebcd69 -->
+	<string>MCD</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

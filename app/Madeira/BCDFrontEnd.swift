@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
+// Modified 2026-10-31 (ausfowler/bcd-games, Mobile Claw Deck): Home is MCD's carousel
+// (MCDHomeView.swift); LB/RB switch GAMES and DOWNLOADS; Y opens the MCD menu, which reaches the
+// Library, Settings and every other destination; Claw Deck's top pill, status pill and hint bar.
 
 import SwiftUI
 
@@ -20,6 +23,10 @@ struct BCDFrontEnd: View {
     /// The menus over the shell (BCDMenu.swift): a game's, on a long press or X, and the library's sort.
     /// A plain reference: the screens only call it; the overlay (BCDMenuHost) is what observes it.
     @State private var cardMenu = BCDMenuModel()
+    /// MCD: the carousel's selection and flip, kept while other screens are up.
+    @StateObject private var carousel = MCDCarouselModel()
+    /// MCD: the game whose page the flipped card's Settings opened.
+    @State private var openedGame: BCDGame?
     @Environment(\.horizontalSizeClass) private var horizontal
     @Environment(\.verticalSizeClass) private var vertical
 
@@ -80,6 +87,12 @@ struct BCDFrontEnd: View {
             installButtons()
         }
         .onChange(of: tab) { _, _ in installButtons() }
+        // MCD: A and B mean different things on a flipped card; the bar follows.
+        .onChange(of: carousel.expanded) { _, _ in installButtons() }
+        .onChange(of: carousel.settingsFocused) { _, _ in installButtons() }
+        // Settings and the game page lead the D-pad themselves while they are up; Home takes it back after.
+        .onChange(of: showSettings) { _, open in if !open { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { installButtons() } } }
+        .onChange(of: openedGame) { _, game in if game == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { installButtons() } } }
         // X shows while the ring is on a game's card.
         .onChange(of: focus.focused) { _, _ in installButtons() }
     }
@@ -88,7 +101,10 @@ struct BCDFrontEnd: View {
 
     @ViewBuilder private var content: some View {
         switch tab {
-        case .home: BCDHomeView(openLibrary: { tab = .library }, openDownloads: { tab = .downloads })
+        case .home:
+            MCDHomeView(model: carousel, play: { store.actions?.play($0) }, openPage: { openedGame = $0 })
+                .bcdGamePage($openedGame, from: "Home")
+                .onAppear { cardMenu.openPage = { openedGame = $0 } }
         case .library: BCDLibraryView(searchRequest: librarySearch)
         case .downloads: BCDDownloadsView()
         }
@@ -100,40 +116,115 @@ struct BCDFrontEnd: View {
         var list: [(BCDHint, () -> Void)] = [
             (BCDHint(button: .leftShoulder, title: "Previous"), { cycle(-1) }),
             (BCDHint(button: .rightShoulder, title: "Next"), { cycle(1) }),
-            (BCDHint(button: .a, title: tab == .downloads ? "Pause or resume" : "Open"), {}),
         ]
-        // The library's search: Y opens it (and closes it again).
-        if tab == .library { list.append((BCDHint(button: .y, title: "Search"), { librarySearch += 1 })) }
-        // A game's menu: X while the ring is on its card (Home's recent games and Continue playing, the Library's grid).
-        if tab != .downloads, let game = BCDMenuModel.gameID(focused: focus.focused, store: store) {
-            list.append((BCDHint(button: .x, title: "Menu"), { cardMenu.showCard(game) }))
+        if tab == .home {
+            // MCD: Claw Deck's Home. The carousel leads Left/Right; A flips the card, then plays or opens Settings.
+            let games = MCDCarouselModel.order(store.games)
+            let current: BCDGame? = games.isEmpty ? nil : games[carousel.index(in: games)]
+            if carousel.expanded {
+                list.append((BCDHint(button: .a, title: "Confirm"), {
+                    guard let game = current else { return }
+                    if carousel.settingsFocused { openedGame = game } else { store.actions?.play(game) }
+                }))
+                list.append((BCDHint(button: .b, title: "Back"), { carousel.setExpanded(false) }))
+            } else {
+                list.append((BCDHint(button: .a, title: "Select"), { if current != nil { carousel.setExpanded(true) } }))
+            }
+            if let game = current { list.append((BCDHint(button: .x, title: "Options"), { cardMenu.showCard(game.id) })) }
+            focus.steer = { direction in
+                guard tab == .home, !focus.layerOpen, !showSettings, openedGame == nil else { return false }
+                switch direction {
+                case .left: carousel.step(-1, in: MCDCarouselModel.order(store.games))
+                case .right: carousel.step(1, in: MCDCarouselModel.order(store.games))
+                case .up, .down: break   // Claw Deck: Up and Down do nothing on the carousel
+                }
+                return true
+            }
+        } else {
+            focus.steer = nil
+            list.append((BCDHint(button: .a, title: tab == .downloads ? "Pause or resume" : "Open"), {}))
+            // A game's menu: X while the ring is on its card (the Library's grid).
+            if tab != .downloads, let game = BCDMenuModel.gameID(focused: focus.focused, store: store) {
+                list.append((BCDHint(button: .x, title: "Options"), { cardMenu.showCard(game) }))
+            }
+            // Claw Deck: B from the Library (and Downloads) goes Home.
+            list.append((BCDHint(button: .b, title: "Home"), { withAnimation(MCDMotion.pop) { tab = .home } }))
         }
+        list.append((BCDHint(button: .y, title: "Menu"), { showMCDMenu() }))
         list.append((BCDHint(button: .menu, title: "Settings"), { openSettings() }))
         focus.setHandlers(list)
+    }
+
+    /// MCD's Y menu (Claw Deck's): every destination the shell had, in one list.
+    private func showMCDMenu() {
+        guard !cardMenu.isOpen else { cardMenu.dismiss(); return }
+        var items: [BCDMenuItem] = []
+        if tab != .home {
+            items.append(BCDMenuItem(id: "mcd.home", title: "Home", symbol: "house.fill") { withAnimation(MCDMotion.pop) { tab = .home } })
+        }
+        items.append(BCDMenuItem(id: "mcd.library", title: "Library", symbol: "square.grid.2x2.fill") { withAnimation(MCDMotion.pop) { tab = .library } })
+        if tab == .library {
+            items.append(BCDMenuItem(id: "mcd.search", title: "Search the library", symbol: "magnifyingglass") { librarySearch += 1 })
+        }
+        items.append(BCDMenuItem(id: "mcd.downloads", title: "Downloads", symbol: "arrow.down.circle.fill",
+                                 detail: store.downloads.isEmpty ? nil : "\(store.downloads.count) in progress") { withAnimation(MCDMotion.pop) { tab = .downloads } })
+        items.append(BCDMenuItem(id: "mcd.settings", title: "Settings", symbol: "gearshape.fill") { openSettings() })
+        items.append(BCDMenuItem(id: "mcd.add", title: "Add a game", symbol: "plus.circle.fill") { store.actions?.addGameFromFiles() })
+        items.append(BCDMenuItem(id: "mcd.launchers", title: "Launchers", symbol: "app.badge.fill",
+                                 detail: "Battle.net, EA app and more, in the Library") { withAnimation(MCDMotion.pop) { tab = .library } })
+        items.append(BCDMenuItem(id: "mcd.accounts", title: "Accounts", symbol: "person.crop.circle.fill") { openSettings(.accounts) })
+        items.append(BCDMenuItem(id: "mcd.controls", title: "Controls", symbol: "gamecontroller.fill") { openSettings(.controls) })
+        items.append(BCDMenuItem(id: "mcd.storage", title: "Storage", symbol: "internaldrive.fill") { openSettings(.storage) })
+        items.append(BCDMenuItem(id: "mcd.refresh", title: "Refresh the library", symbol: "arrow.clockwise") { store.actions?.refreshLibrary() })
+        cardMenu.show(BCDMenuContent(title: "Mobile Claw Deck", items: items))
     }
 
     private func openSettings() {
         showSettings = true
     }
 
+    /// Settings at one section (the MCD menu's Accounts, Controls, Storage).
+    private func openSettings(_ section: BCDSettingsSection) {
+        settingsSection = section
+        showSettings = true
+    }
+
     private func cycle(_ step: Int) {
-        let all = BCDTab.allCases
-        let index = (all.firstIndex(of: tab)! + step + all.count) % all.count
-        withAnimation(.easeOut(duration: 0.18)) { tab = all[index] }
+        // MCD: LB/RB switch GAMES and DOWNLOADS (Claw Deck's GAMES/APPS pill); the Library is in the Y menu.
+        let pair: [BCDTab] = [.home, .downloads]
+        let index = pair.firstIndex(of: tab).map { ($0 + step + pair.count) % pair.count } ?? 0
+        withAnimation(MCDMotion.pop) { tab = pair[index] }
     }
 
     // MARK: Bars
 
     private var topBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             if focus.controllerActive { shoulder("LB") }
-            ForEach(BCDTab.allCases) { item in tabButton(item) }
+            MCDTabPill(tab: $tab, downloads: store.downloads.count)
             if focus.controllerActive { shoulder("RB") }
+            if tab == .library {
+                Text("LIBRARY").font(BCDStyle.caps(15)).tracking(3).foregroundStyle(BCDStyle.lavender)
+                    .padding(.leading, 6)
+            }
             Spacer(minLength: 12)
             statusChips
+            menuButton
             settingsButton
         }
-        .padding(.horizontal, layout.gutter).padding(.top, layout == .pad ? 10 : 6).padding(.bottom, 6)
+        .padding(.horizontal, layout.gutter).padding(.top, layout == .pad ? 12 : 8).padding(.bottom, 6)
+    }
+
+    /// The MCD menu for touch (Y on a controller).
+    private var menuButton: some View {
+        Button { showMCDMenu() } label: {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 38, height: 38)
+                .bcdGlass(cornerRadius: 19)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Menu")
     }
 
     private var portraitTitle: some View {
@@ -191,18 +282,21 @@ struct BCDFrontEnd: View {
             .background(BCDStyle.glow, in: Capsule())
     }
 
+    /// Claw Deck's shoulder key: a small outlined box.
     private func shoulder(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .heavy, design: .rounded))
-            .foregroundStyle(BCDStyle.ground)
-            .frame(width: 30, height: 22)
-            .background(BCDStyle.text, in: Capsule())
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(BCDStyle.lavender)
+            .frame(width: 34, height: 26)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.05)))
+            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
             .accessibilityHidden(true)
     }
 
+    /// Claw Deck's status pill: the controller and its battery, BCD's JIT and update chips, the clock.
     @ViewBuilder private var statusChips: some View {
         let system = store.system
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             BCDUpdateChip { settingsSection = .updates; showSettings = true }
             if layout != .phonePortrait || system.jit != .on {
                 BCDStatusChip(text: system.jit == .on ? "JIT on" : system.jit == .waiting ? "JIT…" : "JIT off",
@@ -212,12 +306,22 @@ struct BCDFrontEnd: View {
                 BCDStatusChip(text: "Memory \(BCDFormat.bytes(limit))",
                               color: system.increasedMemoryLimit ? BCDStyle.mint : Color(red: 1, green: 0.76, blue: 0.29))
             }
-            if layout != .phonePortrait, let name = system.controllerName {
-                HStack(spacing: 6) {
-                    Image(systemName: "gamecontroller.fill")
-                    Text(system.controllerBattery.map { "\(name) · \($0)%" } ?? name).lineLimit(1)
+            if layout != .phonePortrait {
+                HStack(spacing: 12) {
+                    if let name = system.controllerName {
+                        Image(systemName: "gamecontroller.fill").font(.system(size: 17, weight: .semibold))
+                            .accessibilityLabel(name)
+                        if let battery = system.controllerBattery {
+                            Text("\(battery)%").font(BCDStyle.label(15)).foregroundStyle(BCDStyle.mint)
+                        }
+                        Rectangle().fill(Color.white.opacity(0.18)).frame(width: 1, height: 18)
+                    }
+                    TimelineView(.everyMinute) { context in
+                        Text(context.date, format: .dateTime.hour().minute()).font(BCDStyle.label(16)).monospacedDigit()
+                    }
                 }
-                .font(BCDStyle.label(12)).foregroundStyle(BCDStyle.textSoft)
+                .padding(.horizontal, 16).frame(height: 38)
+                .bcdGlass(cornerRadius: 19)
             }
         }
     }
@@ -227,22 +331,59 @@ struct BCDFrontEnd: View {
             Image(systemName: "gearshape.fill")
                 .font(.system(size: 17, weight: .semibold))
                 .frame(width: 38, height: 38)
-                .background(BCDStyle.surfaceRaised, in: Circle())
-                .overlay(Circle().strokeBorder(BCDStyle.stroke, lineWidth: 1))
+                .bcdGlass(cornerRadius: 19)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Settings")
     }
 
+    /// Claw Deck's footer: the buttons' hints in one centred glass capsule.
     private var hintBar: some View {
-        HStack(spacing: 22) {
-            Spacer()
-            ForEach(focus.hints.filter { $0.button != .leftShoulder && $0.button != .rightShoulder }) { BCDHintView(hint: $0) }
+        HStack(spacing: 24) {
+            ForEach(focus.hints.filter { $0.button != .leftShoulder && $0.button != .rightShoulder && $0.button != .menu }) { BCDHintView(hint: $0) }
         }
+        .padding(.horizontal, 22).frame(height: 40)
+        .bcdGlass(cornerRadius: 20)
         // Under a menu or page the overlay draws its own hints; the bar keeps its room.
         .opacity(focus.layerOpen ? 0 : 1)
-        .padding(.horizontal, layout.gutter).frame(height: 40)
-        .overlay(alignment: .top) { Rectangle().fill(BCDStyle.stroke.opacity(0.7)).frame(height: 1) }
+        .frame(maxWidth: .infinity).frame(height: 48)
+        .padding(.bottom, 4)
+    }
+}
+
+/// Claw Deck's GAMES / APPS pill, here GAMES / DOWNLOADS: spaced capitals, the chosen one on a
+/// lighter capsule that slides across (the pop spring).
+struct MCDTabPill: View {
+    @Binding var tab: BCDTab
+    let downloads: Int
+    @Namespace private var pill
+
+    var body: some View {
+        HStack(spacing: 4) {
+            item(.home, "GAMES")
+            item(.downloads, downloads > 0 ? "DOWNLOADS · \(downloads)" : "DOWNLOADS")
+        }
+        .padding(4)
+        .bcdGlass(cornerRadius: 26)
+    }
+
+    private func item(_ value: BCDTab, _ title: String) -> some View {
+        let on = tab == value
+        return Button { withAnimation(MCDMotion.pop) { tab = value } } label: {
+            Text(title)
+                .font(BCDStyle.caps(18)).tracking(3)
+                .foregroundStyle(on ? Color.white : Color.white.opacity(0.42))
+                .padding(.horizontal, 18).frame(height: 40)
+                .background {
+                    if on {
+                        Capsule().fill(Color.white.opacity(0.16))
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                            .matchedGeometryEffect(id: "mcd.tab", in: pill)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 
@@ -251,14 +392,14 @@ enum BCDTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .home: return "Home"
+        case .home: return "Games"
         case .library: return "Library"
         case .downloads: return "Downloads"
         }
     }
     var symbol: String {
         switch self {
-        case .home: return "house.fill"
+        case .home: return "gamecontroller.fill"
         case .library: return "square.grid.2x2.fill"
         case .downloads: return "arrow.down.circle.fill"
         }

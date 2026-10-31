@@ -30,6 +30,7 @@
 		A1000B12 /* BCDComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000B12 /* BCDComponents.swift */; };
 		A1000B13 /* BCDArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000B13 /* BCDArt.swift */; };
 		A1000B14 /* BCDFrontEnd.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000B14 /* BCDFrontEnd.swift */; };
+		A1000F00 /* MCDHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000F00 /* MCDHomeView.swift */; };
 		A1000B15 /* BCDHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000B15 /* BCDHomeView.swift */; };
 		A1000B16 /* BCDLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000B16 /* BCDLibraryView.swift */; };
 		A1000B17 /* BCDDownloadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000B17 /* BCDDownloadsView.swift */; };
@@ -433,6 +434,7 @@
 		A2000B12 /* BCDComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BCDComponents.swift; sourceTree = "<group>"; };
 		A2000B13 /* BCDArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BCDArt.swift; sourceTree = "<group>"; };
 		A2000B14 /* BCDFrontEnd.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BCDFrontEnd.swift; sourceTree = "<group>"; };
+		A2000F00 /* MCDHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCDHomeView.swift; sourceTree = "<group>"; };
 		A2000B15 /* BCDHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BCDHomeView.swift; sourceTree = "<group>"; };
 		A2000B16 /* BCDLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BCDLibraryView.swift; sourceTree = "<group>"; };
 		A2000B17 /* BCDDownloadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BCDDownloadsView.swift; sourceTree = "<group>"; };
@@ -892,6 +894,7 @@
 				A2000B12 /* BCDComponents.swift */,
 				A2000B13 /* BCDArt.swift */,
 				A2000B14 /* BCDFrontEnd.swift */,
+				A2000F00 /* MCDHomeView.swift */,
 				A2000B15 /* BCDHomeView.swift */,
 				A2000B16 /* BCDLibraryView.swift */,
 				A2000B17 /* BCDDownloadsView.swift */,
@@ -1482,6 +1485,7 @@
 				A1000B12 /* BCDComponents.swift in Sources */,
 				A1000B13 /* BCDArt.swift in Sources */,
 				A1000B14 /* BCDFrontEnd.swift in Sources */,
+				A1000F00 /* MCDHomeView.swift in Sources */,
 				A1000B15 /* BCDHomeView.swift in Sources */,
 				A1000B16 /* BCDLibraryView.swift in Sources */,
 				A1000B17 /* BCDDownloadsView.swift in Sources */,

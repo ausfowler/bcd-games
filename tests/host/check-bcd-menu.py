@@ -92,9 +92,11 @@ check("Home and the Library let the menu open a game's page over themselves",
       ".onAppear { menu?.openPage = { opened = $0 } }" in home and ".onAppear { menu?.openPage = { opened = $0 } }" in library)
 
 # ---- controller: X ----------------------------------------------------------------------------------
-check("X opens the menu of the game under the ring, on Home and the Library, with the hint \"Menu\"",
+# MCD (fork, 2026-10-31): X is Claw Deck's "Options"; on Home it is the carousel's selected game.
+check("X opens the menu of the game under the ring (Library) or the carousel's game (Home), with the hint \"Options\"",
       'if tab != .downloads, let game = BCDMenuModel.gameID(focused: focus.focused, store: store) {' in shell
-      and 'BCDHint(button: .x, title: "Menu"), { cardMenu.showCard(game) }' in shell)
+      and 'BCDHint(button: .x, title: "Options"), { cardMenu.showCard(game) }' in shell
+      and 'BCDHint(button: .x, title: "Options"), { cardMenu.showCard(game.id) }' in shell)
 check("a card's focus ids name its game: library.game.<id>, home.recent.<id>, home.continue",
       'static let cardPrefixes = ["library.game.", "home.recent."]' in menu and 'static let continueID = "home.continue"' in menu
       and 'focusID: "library.game.\\(game.id)"' in library and 'focusID: "home.recent.\\(game.id)"' in home

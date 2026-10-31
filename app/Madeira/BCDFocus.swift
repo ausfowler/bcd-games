@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
+// Modified 2026-10-31 (ausfowler/bcd-games, Mobile Claw Deck): Claw Deck focus ring and coloured hint glyphs.
 
 import SwiftUI
 import GameController
@@ -302,10 +303,11 @@ private struct BCDFocusable: ViewModifier {
         content
             .overlay {
                 if isFocused {
+                    // MCD (2026-10-31): Claw Deck's focus, a white 2 pt ring with a blue glow (look.rs focus_fill).
                     RoundedRectangle(cornerRadius: cornerRadius + 4, style: .continuous)
-                        .strokeBorder(BCDStyle.glow, lineWidth: 3)
+                        .strokeBorder(Color.white, lineWidth: 2.5)
                         .padding(-5)
-                        .shadow(color: BCDStyle.fuchsia.opacity(0.55), radius: 10)
+                        .shadow(color: BCDStyle.accent.opacity(0.6), radius: 11)
                         .allowsHitTesting(false)
                 }
             }
@@ -343,15 +345,32 @@ struct BCDHintView: View {
     let hint: BCDHint
     var body: some View {
         HStack(spacing: 7) {
+            // MCD (2026-10-31): Claw Deck's glyphs, A green, B red, X blue, Y amber (look.rs hint).
             Text(glyph)
-                .font(.system(size: glyph.count > 1 ? 10 : 12, weight: .heavy, design: .rounded))
-                .foregroundStyle(BCDStyle.ground)
+                .font(.system(size: glyph.count > 1 ? 10 : 13, weight: .bold))
+                .foregroundStyle(glyphInk)
                 .frame(minWidth: 24, minHeight: 24)
                 .padding(.horizontal, glyph.count > 1 ? 4 : 0)
-                .background(BCDStyle.text, in: Capsule())
-            Text(hint.title).font(BCDStyle.label(14)).foregroundStyle(BCDStyle.text)
+                .background(glyphFill, in: Capsule())
+            Text(hint.title).font(BCDStyle.body(16)).foregroundStyle(BCDStyle.text)
         }
         .accessibilityElement(children: .combine)
+    }
+    private var glyphFill: Color {
+        switch hint.button {
+        case .a: return BCDStyle.padA
+        case .b: return BCDStyle.padB
+        case .x: return BCDStyle.padX
+        case .y: return BCDStyle.padY
+        default: return Color.white.opacity(0.14)
+        }
+    }
+    private var glyphInk: Color {
+        switch hint.button {
+        case .y: return Color(red: 0.169, green: 0.114, blue: 0.0)   // #2B1D00
+        case .a, .b, .x: return .white
+        default: return BCDStyle.text
+        }
     }
     private var glyph: String {
         switch hint.button {

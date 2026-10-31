@@ -110,8 +110,9 @@ check("Library: Add a game, Search and Refresh stay in sight at the end of the f
       'round("library.search", searching ? "xmark" : "magnifyingglass"' in library
       and 'rowButton("library.add", "Add a game", "plus") { store.actions?.addGameFromFiles() }' in library
       and "so turning the phone does not replace it" in library)
-check("Library: Y on the library tab opens the search (and closes it again)",
-      'if tab == .library { list.append((BCDHint(button: .y, title: "Search"), { librarySearch += 1 })) }' in shell
+# MCD (fork, 2026-10-31): Y opens the MCD menu everywhere; on the Library tab it lists "Search the library".
+check("Library: the MCD menu's Search the library opens the search (and closes it again)",
+      'items.append(BCDMenuItem(id: "mcd.search", title: "Search the library", symbol: "magnifyingglass") { librarySearch += 1 })' in shell
       and "case .library: BCDLibraryView(searchRequest: librarySearch)" in shell
       and ".onChange(of: searchRequest) { _, _ in toggleSearch() }" in library and "typing = searching" in library)
 check("Library: Refresh, a button and pull to refresh, calls the store's refreshLibrary",
