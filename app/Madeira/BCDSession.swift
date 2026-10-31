@@ -50,7 +50,7 @@ enum BCDSessionTone: Equatable {
 
 enum BCDSessionStyle {
     static let amber = Color(red: 1.0, green: 0.76, blue: 0.29)      // #FFC24A
-    static let panel = Color(red: 0.063, green: 0.047, blue: 0.122)   // #100C1F
+    static let panel = Color(red: 0.067, green: 0.075, blue: 0.098)   // #111319 (Claw Deck ink; was #100C1F violet)
     /// The game under the menu is dimmed, never blurred.
     static let dim = Color.black.opacity(0.55)
 }

@@ -11,7 +11,8 @@ on:
 # A push and a manual dispatch seconds apart used to start two parallel
 # multi-hour macOS jobs on the same commit.
 concurrency:
-  group: build-ipa
+  # bcd-duo: in the fork, one build per branch (duo-support and clawdeck-ui build side by side).
+  group: ${{ github.repository == 'ausfowler/bcd-games' && format('build-ipa-{0}', github.ref) || 'build-ipa' }}
   cancel-in-progress: true
 
 jobs:
