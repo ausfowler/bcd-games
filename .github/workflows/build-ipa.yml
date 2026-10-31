@@ -20,7 +20,11 @@ jobs:
     # bcd-duo: and in ausfowler/bcd-games (the iPhone Duo fork), which keeps its
     # unsigned IPA as a run artifact instead of the owner's private bucket (below).
     if: github.repository == 'thebcd69/madeira-bcd' || github.repository == 'ausfowler/bcd-games'
-    runs-on: macos-15
+    # bcd-duo: the fork builds with Xcode 27 (GitHub's public-preview xcode-27 image).
+    # The iPhone Duo runs an app built with an older SDK in a boxed compatibility mode
+    # (a 667x375 pt window on iPhone19,4, log of 2026-10-31); an app built for iOS 27
+    # gets the Duo's display. "Select newest Xcode" below picks the newest 27.x there.
+    runs-on: ${{ github.repository == 'ausfowler/bcd-games' && 'xcode-27' || 'macos-15' }}
     # contents: write only so the token can see DRAFT releases, which is where
     # the Metal Shader Converter installer is kept (drafts are not public).
     # Nothing in this job creates, edits or pushes anything.
