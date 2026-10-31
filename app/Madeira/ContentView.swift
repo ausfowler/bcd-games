@@ -2399,13 +2399,15 @@ struct ContentView: View {
             // (ml1172's default: 1408x648 on a 19.5:9 iPhone, 1152x800 on an 11-inch
             // iPad), as every library entry defaults to; a fixed 1280x720 left bars
             // above and below on an iPad.
+            ResolutionChoices.refreshScreen(reason: "dock")   // bcd-duo: the screen BCD is on now
             var (width, height) = ResolutionChoices.defaultSize()
             if let txt = MadeiraConfig.get("desktop-size") {
                 let p = txt.lowercased().split(separator: "x").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
                 if p.count == 2, p[0] >= 640, p[1] >= 360, p[0] <= 3840, p[1] <= 2160 { width = p[0]; height = p[1] }
             }
             // A Steam game's own Resolution (validated above) sizes its Dock desktop.
-            if let size = profile?.resolution.split(separator: "x").compactMap({ Int($0) }), size.count == 2 {
+            // bcd-duo: a screen-shaped Resolution made on a foldable's other screen follows to this one.
+            if let size = profile.map({ ResolutionChoices.followScreenAtLaunch($0.resolution) })?.split(separator: "x").compactMap({ Int($0) }), size.count == 2 {
                 width = size[0]; height = size[1]
             }
             setenv("MADEIRA_EXE", "explorer.exe", 1)

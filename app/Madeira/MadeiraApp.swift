@@ -33,6 +33,9 @@ struct MadeiraApp: App {
             ContentView()
                 .modifier(ClaimGamepadEvents())
                 .onAppear {
+                    // bcd-duo: follow the screen BCD is on (an iPhone Duo's cover or inner screen).
+                    ResolutionChoices.observeScreen()
+                    ResolutionChoices.refreshScreen(reason: "start")
                     GamepadInput.shared.start()
                     // BCD (2026-10-18): controllers, their tester and the key mapping (BCDControllerHub.swift).
                     BCDControllerHub.shared.start(.live)

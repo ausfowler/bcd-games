@@ -133,7 +133,8 @@ enum GuestDisplay {
     static func configureSessionDefault(view: CGSize, knob: String?) -> (w: Int, h: Int, source: String) {
         var mode = defaultMode(forLandscapeView: view)
         var source = "view"
-        if let raw = knob?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+        // bcd-duo: a screen-shaped Resolution made on the other screen of a foldable follows to this one.
+        if let raw = knob.map({ ResolutionChoices.followScreenAtLaunch($0.trimmingCharacters(in: .whitespacesAndNewlines)) }), !raw.isEmpty {
             let parts = raw.lowercased().split(separator: "x")
             if parts.count == 2, let w = Int(parts[0]), let h = Int(parts[1]), w > 0, h > 0 {
                 mode = (w, h)
@@ -178,18 +179,147 @@ enum ResolutionChoices {
         var pixels: CGSize
     }
 
-    /// Read once. MadeiraApp.init touches it first, on the main thread;
-    /// library entries (whose default comes from it) are also made off it.
-    static var screen: Screen = {
+    /// MadeiraApp.init reads it first, on the main thread; library entries (whose
+    /// default comes from it) are also made off it, so they read this cached value.
+    /// bcd-duo: no longer read once. A foldable (iPhone Duo) has two screens of
+    /// different shapes, so refreshScreen() re-reads it on the main thread when the
+    /// app becomes active, the device turns, a scene's geometry changes and before
+    /// each launch, and every screen shape seen is remembered (knownScreens) so a
+    /// screen-shaped Resolution made on one screen follows to the other (followScreen).
+    static var screen: Screen = readScreen(scenes: false)
+
+    /// `scenes` false: the main screen only (the first read, during App.init, before the
+    /// application has scenes); true: the foreground scene's screen, else the main screen.
+    private static func readScreen(scenes useScenes: Bool = true) -> Screen {
         #if canImport(UIKit)
-        let b = UIScreen.main.bounds, n = UIScreen.main.nativeBounds
+        let scenes = useScenes ? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene } : []
+        let s = (scenes.first { $0.activationState == .foregroundActive } ?? scenes.first)?.screen ?? UIScreen.main
+        let b = s.bounds, n = s.nativeBounds
         return Screen(points: CGSize(width: max(b.width, b.height), height: min(b.width, b.height)),
                       pixels: CGSize(width: max(n.width, n.height), height: min(n.width, n.height)))
         #else
         // Hosts without UIKit (the host tests): an 11-inch iPad.
         return Screen(points: CGSize(width: 1180, height: 820), pixels: CGSize(width: 2360, height: 1640))
         #endif
+    }
+
+    /// bcd-duo: re-reads the screen (main thread only) and remembers its shape.
+    /// Logs a line when the shape changed (folding or unfolding an iPhone Duo).
+    static func refreshScreen(reason: String) {
+        #if canImport(UIKit)
+        guard Thread.isMainThread else { return }
+        #endif
+        let now = readScreen()
+        guard now.points.width > 0, now.points.height > 0 else { return }
+        let changed = now.points != screen.points || now.pixels != screen.pixels
+        screen = now
+        remember(now)
+        if changed {
+            fputs(String(format: "[bcd-duo] screen %@: %.0fx%.0f pt, %.0fx%.0f px, default %@\n",
+                         reason, now.points.width, now.points.height, now.pixels.width, now.pixels.height,
+                         defaultValue), stderr)
+        }
+    }
+
+    /// bcd-duo: re-read the screen whenever it may have changed. Idempotent, app lifetime.
+    static func observeScreen() { _ = screenObservers }
+
+    #if canImport(UIKit)
+    private static var sceneObservations: [ObjectIdentifier: NSKeyValueObservation] = [:]
+
+    /// Watches every window scene's geometry (a fold changes it without a rotation).
+    private static func watchScenes() {
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes
+        where sceneObservations[ObjectIdentifier(scene)] == nil {
+            sceneObservations[ObjectIdentifier(scene)] = scene.observe(\.effectiveGeometry, options: [.new]) { _, _ in
+                DispatchQueue.main.async { refreshScreen(reason: "geometry") }
+            }
+        }
+    }
+
+    private static let screenObservers: [NSObjectProtocol] = {
+        let center = NotificationCenter.default
+        return [
+            center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+                watchScenes(); refreshScreen(reason: "active")
+            },
+            center.addObserver(forName: UIScene.didActivateNotification, object: nil, queue: .main) { _ in
+                watchScenes(); refreshScreen(reason: "scene")
+            },
+            center.addObserver(forName: UIDevice.orientationDidChangeNotification, object: nil, queue: .main) { _ in
+                refreshScreen(reason: "orientation")
+            },
+        ]
     }()
+    #else
+    private static let screenObservers: [NSObjectProtocol] = []
+    #endif
+
+    // MARK: bcd-duo: screens of other shapes
+
+    private static let knownKey = "bcd.duo.known-screens"
+
+    private static func encode(_ s: Screen) -> String {
+        "\(Int(s.points.width))x\(Int(s.points.height))@\(Int(s.pixels.width))x\(Int(s.pixels.height))"
+    }
+
+    private static func decode(_ text: String) -> Screen? {
+        let halves = text.split(separator: "@")
+        guard halves.count == 2 else { return nil }
+        let p = halves[0].split(separator: "x").compactMap { Int($0) }, n = halves[1].split(separator: "x").compactMap { Int($0) }
+        guard p.count == 2, n.count == 2, p.allSatisfy({ $0 > 0 }), n.allSatisfy({ $0 > 0 }) else { return nil }
+        return Screen(points: CGSize(width: p[0], height: p[1]), pixels: CGSize(width: n[0], height: n[1]))
+    }
+
+    /// Every screen shape this device has shown BCD (one on most devices; two on a foldable).
+    static var knownScreens: [Screen] {
+        (UserDefaults.standard.stringArray(forKey: knownKey) ?? []).compactMap(decode)
+    }
+
+    private static func remember(_ s: Screen) {
+        var list = UserDefaults.standard.stringArray(forKey: knownKey) ?? []
+        let code = encode(s)
+        guard !list.contains(code) else { return }
+        list.append(code)
+        UserDefaults.standard.set(Array(list.suffix(4)), forKey: knownKey)
+    }
+
+    /// bcd-duo: a Resolution made for another screen of this device, brought to this one.
+    ///
+    /// The screen-shaped choices (each pixel budget, and the 720-lines size) are tied to
+    /// the screen they were made on. On an iPhone Duo a game set up folded would render
+    /// for the cover screen's shape on the inner screen and be boxed in black, and the
+    /// other way round. A value equal to one of those choices for a remembered screen of
+    /// another shape becomes the same choice for this screen. Any other value (a PC size
+    /// such as 1280x720, a size typed by hand) is kept as it is, and so is everything on a
+    /// device with one screen shape, where nothing changes.
+    static func followScreen(_ value: String, others: [Screen]? = nil, current: Screen? = nil) -> String {
+        let cur = current ?? screen
+        let p = value.lowercased().split(separator: "x").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+        guard p.count == 2, p[0] > 0, p[1] > 0, !fills(p[0], p[1], screen: cur) else { return value }
+        for other in others ?? knownScreens where abs(aspect(other) - aspect(cur)) > 0.02 {
+            for budget in budgets {
+                let was = shape(other, pixels: budget.pixels)
+                if was == (p[0], p[1]) {
+                    let now = shape(cur, pixels: budget.pixels)
+                    return "\(now.w)x\(now.h)"
+                }
+            }
+            if let was = screen720(for: other), was == (p[0], p[1]) {
+                let now = screen720(for: cur) ?? defaultSize(for: cur)
+                return "\(now.w)x\(now.h)"
+            }
+        }
+        return value
+    }
+
+    /// followScreen at launch time: re-reads the screen first and logs a change.
+    static func followScreenAtLaunch(_ value: String) -> String {
+        refreshScreen(reason: "launch")
+        let out = followScreen(value)
+        if out != value { fputs("[bcd-duo] resolution \(value) was made for another screen; this one gets \(out)\n", stderr) }
+        return out
+    }
 
     /// Pixel counts of the screen-shaped choices: a light one (944x656's, 0.8x
     /// an 11-inch iPad's points), the default (1280x720's: 1408x648 on a 19.5:9

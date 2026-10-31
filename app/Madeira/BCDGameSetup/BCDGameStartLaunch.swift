@@ -72,7 +72,7 @@ extension BCDGameSetup {
         let command = "/c \"\(batchPath)\""
         if entry.runsInDesktop {
             setenv("MADEIRA_EXE", "explorer.exe", 1)
-            setenv("MADEIRA_ARGS", "/desktop=shell,\(entry.resolution) cmd \(command)", 1)
+            setenv("MADEIRA_ARGS", "/desktop=shell,\(ResolutionChoices.followScreen(entry.resolution)) cmd \(command)", 1)
         } else {
             setenv("MADEIRA_EXE", "C:\\windows\\system32\\cmd.exe", 1)
             setenv("MADEIRA_ARGS", command, 1)
