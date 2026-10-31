@@ -114,6 +114,9 @@ struct BCDFrontEnd: View {
         switch tab {
         case .home:
             MCDHomeView(model: carousel, play: { playOrInstall($0) }, openPage: { openedGame = $0 })
+                // Centred on the whole screen: in landscape the Duo keeps its status icons in a strip down one side
+                // (the safe area), which pushed the carousel off centre. The bars still keep clear of the strip.
+                .ignoresSafeArea(.container, edges: .horizontal)
                 .bcdGamePage($openedGame, from: "Home")
                 .onAppear { cardMenu.openPage = { openedGame = $0 } }
         case .library: BCDLibraryView(searchRequest: librarySearch)

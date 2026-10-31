@@ -135,6 +135,8 @@ struct MCDHomeView: View {
         // made them small, so MCD uses more of the screen: 36% of the width in landscape (55% upright), 60% of the height.
         let portrait = size.height > size.width
         let sc = max(min(size.width * (portrait ? 0.55 : 0.36) / 300, size.height * 0.60 / 300), 0.05)
+        // The flipped card is 540 x 300 units; it never outgrows the screen (the narrow folded Duo, upright).
+        let backScale = max(min(sc * 1.05, (size.width - 32) / 540, (size.height - 24) / 300), 0.05)
         // The finger's travel in cards (0 when the scale is not usable).
         let drag = MCDMath.finite(Double(dragged / (180 * sc)))
         let center = CGPoint(x: size.width / 2, y: size.height * 0.45)
@@ -150,6 +152,7 @@ struct MCDHomeView: View {
                                 expand: isSelected && model.expanded ? 1 : 0,
                                 neighbourPush: model.expanded ? 1 : 0,
                                 sc: sc,
+                                backScale: backScale,
                                 selected: isSelected,
                                 settingsFocused: model.settingsFocused,
                                 play: { play(game) },
@@ -208,6 +211,8 @@ struct MCDCarouselCard: View, Animatable {
     var expand: Double
     var neighbourPush: Double
     let sc: CGFloat
+    /// The flipped card's own scale (540 x 300 units, fitted to the screen).
+    let backScale: CGFloat
     let selected: Bool
     let settingsFocused: Bool
     let play: () -> Void
@@ -227,10 +232,12 @@ struct MCDCarouselCard: View, Animatable {
         var opacity = d < 1 ? 1 - 0.6 * d : max(0.5 - 0.1 * d, 0)
         if !selected { opacity *= 1 - 0.45 * neighbourPush }
         let push = selected ? 0 : (pos == 0 ? 0 : (pos > 0 ? 1.0 : -1.0)) * 165 * neighbourPush
-        let width = (200 + 284 * expand) * sc * scale
-        let height = (300 + 19 * expand) * sc * scale
+        // The cover's size grows into the flipped card's: Claw Deck's flip, with a wider back (540 x 300 units) so its
+        // text column has room (the 484-unit back gave the text 40% of the card and cut words short).
+        let width = 200 * sc * scale * (1 - expand) + 540 * backScale * expand
+        let height = 300 * sc * scale * (1 - expand) + 300 * backScale * expand
         let flip = cos(expand * .pi)
-        let radius = (12 + 4 * expand) * sc * scale
+        let radius = 12 * sc * scale * (1 - expand) + 16 * backScale * expand
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
 
         return Group {
@@ -261,47 +268,60 @@ struct MCDCarouselCard: View, Animatable {
     }
 
     private func back(shape: RoundedRectangle, width: CGFloat, height: CGFloat, reveal: Double) -> some View {
-        let s = sc
-        return HStack(alignment: .center, spacing: 34 * s) {
+        let s = backScale
+        return HStack(alignment: .center, spacing: 24 * s) {
+            // The cover keeps about 28% of the card (Claw Deck's back gives it about 30%).
             BCDGameArt(game: game, kind: .cover, showTitle: false)
-                .frame(width: 200 * s, height: 300 * s)
+                .frame(width: 150 * s, height: 225 * s)
                 .clipShape(RoundedRectangle(cornerRadius: 10 * s, style: .continuous))
                 .shadow(color: .black.opacity(0.45), radius: 14 * s, y: 6 * s)
-            VStack(alignment: .leading, spacing: 12 * s) {
-                Text(game.title).font(BCDStyle.title(30 * s)).lineLimit(2).minimumScaleFactor(0.6)
-                MCDChip(text: game.store.mcdLabel)
-                BCDGameStatusLine(game: game)
-                HStack(alignment: .top, spacing: 26 * s) {
-                    fact("Last played", game.lastPlayed.map { BCDFormat.ago($0) } ?? "Never")
-                    if let size = game.size { fact(game.state.isInstalled ? "Installed" : "Download", BCDFormat.bytes(size)) }
-                    if game.minutesPlayed > 0 { fact("Played", BCDFormat.playtime(game.minutesPlayed)) }
+            VStack(alignment: .leading, spacing: 9 * s) {
+                // Two lines before it shrinks; never cut short.
+                Text(game.title).font(BCDStyle.title(27 * s)).lineLimit(2).minimumScaleFactor(0.75)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10 * s) {
+                    MCDChip(text: game.store.mcdLabel)
+                    BCDGameStatusLine(game: game).font(BCDStyle.body(14 * s))
                 }
-                // Claw Deck: Play takes 60% of the row, Settings the rest; neither label can be squeezed.
+                HStack(alignment: .top, spacing: 22 * s) {
+                    fact("Last played", game.lastPlayed.map { BCDFormat.ago($0) } ?? "Never")
+                    if game.minutesPlayed > 0 { fact("Played", BCDFormat.playtime(game.minutesPlayed)) }
+                    if let size = game.size { fact(game.state.isInstalled ? "Installed" : "Download", BCDFormat.bytes(size)) }
+                }
+                Spacer(minLength: 4 * s)
+                // Play 55%, Settings 45%: both labels fit whole ("Settings" was cut to "Setti...").
                 GeometryReader { row in
                     let gap = 10 * s
+                    let usable = max(row.size.width - gap, 2)
                     HStack(spacing: gap) {
                         Button(action: play) {
-                            Label(game.state.isInstalled ? "Play" : "Install", systemImage: game.state.isInstalled ? "play.fill" : "arrow.down")
-                                .font(BCDStyle.label(19 * s)).lineLimit(1).minimumScaleFactor(0.6)
-                                .frame(width: max((row.size.width - gap) * 0.6, 1), height: 46 * s)
-                                .bcdFocusRing(!settingsFocused, cornerRadius: 12 * s)
+                            HStack(spacing: 7 * s) {
+                                Image(systemName: game.state.isInstalled ? "play.fill" : "arrow.down").font(.system(size: 16 * s, weight: .bold))
+                                Text(game.state.isInstalled ? "Play" : "Install").font(BCDStyle.label(18 * s))
+                            }
+                            .lineLimit(1).minimumScaleFactor(0.5)
+                            .frame(width: usable * 0.55, height: 44 * s)
+                            .bcdFocusRing(!settingsFocused, cornerRadius: 12 * s)
                         }
                         Button(action: settings) {
-                            Label("Settings", systemImage: "gearshape.fill")
-                                .font(BCDStyle.label(19 * s)).lineLimit(1).minimumScaleFactor(0.6)
-                                .frame(width: max((row.size.width - gap) * 0.4, 1), height: 46 * s)
-                                .background(RoundedRectangle(cornerRadius: 12 * s, style: .continuous).fill(Color.white.opacity(0.06)))
-                                .bcdFocusRing(settingsFocused, cornerRadius: 12 * s)
+                            HStack(spacing: 6 * s) {
+                                Image(systemName: "gearshape.fill").font(.system(size: 14 * s, weight: .semibold))
+                                Text("Settings").font(BCDStyle.label(16 * s))
+                            }
+                            .lineLimit(1).minimumScaleFactor(0.5)
+                            .frame(width: usable * 0.45, height: 44 * s)
+                            .background(RoundedRectangle(cornerRadius: 12 * s, style: .continuous).fill(Color.white.opacity(0.06)))
+                            .bcdFocusRing(settingsFocused, cornerRadius: 12 * s)
                         }
                     }
                 }
-                .frame(height: 46 * s)
+                .frame(height: 44 * s)
                 .buttonStyle(.plain)
                 .foregroundStyle(.white)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: 225 * s, alignment: .leading)
         }
-        .padding(28 * s)
+        .padding(.horizontal, 24 * s).padding(.vertical, 20 * s)
         .opacity(reveal)
         .frame(width: width, height: height)
         .bcdGlass(cornerRadius: shape.cornerSize.width)
@@ -309,10 +329,11 @@ struct MCDCarouselCard: View, Animatable {
     }
 
     private func fact(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3 * sc) {
-            Text(title).font(BCDStyle.body(14 * sc)).foregroundStyle(BCDStyle.textSoft)
-            Text(value).font(BCDStyle.label(17 * sc)).lineLimit(1).minimumScaleFactor(0.7)
+        VStack(alignment: .leading, spacing: 3 * backScale) {
+            Text(title).font(BCDStyle.body(13 * backScale)).foregroundStyle(BCDStyle.textSoft).lineLimit(1)
+            Text(value).font(BCDStyle.label(16 * backScale)).lineLimit(1).minimumScaleFactor(0.6)
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
