@@ -4129,6 +4129,30 @@
       ]
     },
     {
+      "id": "valheim",
+      "title": "Valheim",
+      "version": 1,
+      "match": {
+        "steamAppIDs": [892970],
+        "steamFolders": ["valheim"],
+        "programs": [
+          {"name": "valheim.exe"}
+        ]
+      },
+      "config": [
+        "# BCD's recommended settings for Valheim.",
+        "# Reset to Recommended, at the bottom of the game's settings, brings them back.",
+        "env.MADEIRA_EC_HOOK_TRACE = 0",
+        "env.MADEIRA_PAD_MODE = dualsense"
+      ],
+      "notes": [
+        "Valheim (Steam 892970, Unity, Steamworks in the game process): in XInput mode the game never sees a controller (a Razer Kishi Ultra",
+        "on iPhone19,4 / iOS 27.2, fork ausfowler/bcd-games, log of 2026-10-31: UnityPlayer, dinput8, HID and Steam's CSteamController HID",
+        "thread loaded; keys-and-mouse from the pad half works). Player 1 as a HID DualSense (env.MADEIRA_PAD_MODE = dualsense) works, tested",
+        "by the owner of that device."
+      ]
+    },
+    {
       "id": "big-walk",
       "title": "Big Walk",
       "version": 1,
