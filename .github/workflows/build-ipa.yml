@@ -863,11 +863,13 @@ jobs:
       # behind the wrapper now reaches the drive resolver. Only names that failed before change (iOS only).
       # Based on thebcd69/bcd-games#16 by le0-VV.
       - name: Check and patch GLOBALROOT DOS paths
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-globalroot.py
           python3 tools/patch-wine-globalroot.py wine/dlls/ntdll/unix/file.c
 
       - name: Check and patch opt-in app-local DLL reads
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-app-local-dll.py
           python3 tools/patch-wine-app-local-dll.py wine/dlls/ntdll/unix/file.c
@@ -900,6 +902,7 @@ jobs:
         run: python3 tests/host/check-teb-trampoline-capacity.py
 
       - name: Check read-only image patch diagnostics
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-image-patch-trace.py
           python3 tests/host/check-iat-sync-owner.py
@@ -940,6 +943,7 @@ jobs:
         run: python3 tests/host/check-notices.py
 
       - name: Check WoW window guard reservation contracts
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-wow-guard.py
           python3 tests/host/check-lazy-windows.py
@@ -948,11 +952,13 @@ jobs:
       # name heuristic's arm64ec-windows core ended every such start in c000007b ("could not load kernel32.dll", 0.5 s).
       # cmd.exe, and nothing else, takes the aarch64-windows core (WineProcessBridge.m madeira_target_is_cmd).
       - name: Check the session core choice (cmd.exe in aarch64-windows)
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-launch-routing.py
           python3 tests/host/check-cmd-bundle.py
 
       - name: Check JIT pool image placement contracts
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-pool-low-images.py
           python3 tests/host/check-x64-image-nocopy.py
@@ -1067,6 +1073,7 @@ jobs:
       # FEX's backpatch lock, and the PE ntdll's uncapped "[rtcs] pre" line is
       # kept to 10 per second per thread (MADEIRA_RTCS_LOG=all|N).
       - name: Check the SMC store fast path and the [rtcs] log cap
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-smc-store-fastpath.py
           python3 tests/host/check-rtcs-cap.py
@@ -2335,6 +2342,7 @@ jobs:
       # register space 0 are converted instead of refused. The metal-gap line
       # (logging only) says what Metal's allocated total is made of.
       - name: Check the opt-in ExecuteIndirect fast path, full-screen window, DXBC register spaces and the Metal census
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-indirect-fast.py
           python3 tests/host/check-fullscreen-window.py
@@ -2346,6 +2354,7 @@ jobs:
       # no resource: the D3D12 runtime logs which bindings no root-signature
       # entry covers (logging only).
       - name: Check the empty fragment function and the root-signature miss log
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-null-fragment.py
           python3 tests/host/check-rsig-miss.py
@@ -2361,6 +2370,7 @@ jobs:
       # libraries kept for 52,570 pipelines (iOS closed it at 8,189 MB), and
       # clears with rectangles cleared whole targets. Both opt-in.
       - name: Check shader libraries only for pipelines in use and rectangle clears
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-pso-lazy-libs.py
           python3 tests/host/check-clear-rects.py
@@ -2400,6 +2410,7 @@ jobs:
       # foreground for a process when no window is foreground
       # (MADEIRA_INPUT_FOREGROUND=1).
       - name: Check XInput pads in Windows.Gaming.Input and the input foreground
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-wgi-host-pads.py
           python3 tests/host/check-input-foreground.py
@@ -2411,6 +2422,7 @@ jobs:
       # driver's clip and warp reports and the wineserver's reader report (2026-10-18: a
       # tester's Warcraft II on an iPad drifted away from the iPad pointer).
       - name: Check hardware keyboard and mouse
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-hardware-input.py
           python3 tests/host/check-nav-keys.py
@@ -2441,6 +2453,7 @@ jobs:
       # 32-byte STP Q across a 16 KB page (NFS Underground 2), a zero-size D3D12 texture (Spider-Man Remastered), the
       # [alloc-fail] log past 65536 failures (Spelunky 2).
       - name: Check the build 580 engine fixes
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-anon-cas.py
           python3 tests/host/check-stp-straddle.py
@@ -2455,6 +2468,7 @@ jobs:
       # Mono games), env.MADEIRA_USER_VA_GB (FINAL FANTASY TACTICS asks for 256 GiB), create_view's assert, env.MADEIRA_ANON_CAS_FLUSH
       # (Jetboard Joust), and the log-only diagnostics: [stp-split] read-back, [cxx-type], [smc-loop].
       - name: Check the build 591 engine fixes
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-fault-guard-rate.py
           python3 tests/host/check-fault-guard-guest-rip.py
@@ -2507,6 +2521,7 @@ jobs:
       # flags and extended parameters, once per kind) and [map-name] (every named section a process creates or opens, with the
       # status): the Rockstar service never reached its 2 MB shared-memory allocation in builds 574/576. Logging only.
       - name: Check [nt-fail] and [map-name]
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-nt-fail-log.py
           python3 tests/host/check-map-name-log.py
@@ -2523,6 +2538,7 @@ jobs:
       # address map retries the next free range after a refused MAP_FIXED (iPhone13,4 / iOS 18), and every spawn line
       # names the child's current directory (Terraria's "Asset could not be found").
       - name: Check pool dead-range skip, small-map retry, spawn cwd
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-pool-dead-range.py
           python3 tests/host/check-reserved-area-retry.py
@@ -2568,6 +2584,7 @@ jobs:
       # which Windows error the game closed with; auto-tune gets the status.
       # env.MADEIRA_DOCK_GAME_END = 0 turns it off, env.MADEIRA_DOCK_GAME_END_GRACE sets the seconds.
       - name: Check Dock game end
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: ASAN_OPTIONS=symbolize=0 python3 tests/host/check-dock-game-end.py
 
       # madeira-bcd (round 579, Tomb Raider: Underworld ZWAA2K): a 32-bit main program that cannot get its 4 GB window ended the boot
@@ -2585,6 +2602,7 @@ jobs:
       # constructed memory (macOS), the second the ring and provenance functions against fakes. Rule x87-int64-roundtrip (auto-tune)
       # is checked with the other rules.
       - name: Check [x87-int64] and the fault neighbour lines
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-x87-int64-diag.py
           python3 tests/host/check-fault-neighbour-diag.py
@@ -2592,6 +2610,7 @@ jobs:
       # ajan7-arkham: [wow-null32] (a 32-bit guest's use of the NULL page: registers, stack and TLS cells) and the [tls-cross-clear] line
       # plus MADEIRA_TLS_CLEAR_OWN_PROCESS (TlsFree reaches into other pseudo-processes' threads); compiled runs against fakes (macOS).
       - name: Check [wow-null32] and the TlsFree cross-process line
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-wow-null-diag.py
           python3 tests/host/check-tls-clear-process.py
@@ -2798,6 +2817,7 @@ jobs:
       # ntdll's .data copies only its bytes) and env.MADEIRA_FAULT_LOOP_GUEST_PROGRESS (breakpoints at different guest addresses are no
       # stuck thread). tests/x64/shared-section-x64.c is the device program for the first two.
       - name: Check the executable-section switches (D2R)
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: |
           python3 tests/host/check-shared-section-exec.py
           python3 tests/host/check-ntdll-data-sync-range.py
