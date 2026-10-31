@@ -37,6 +37,11 @@ _msc_resolve() {
     local pkg="$REPO_ROOT/research/GPTK/Metal Shader Converter 4.0 beta 2.pkg"
     local pkg_sha="1acc33c87ea663933df89721a998d066106685473020bcbe007cee7a16155734"
     local ios_lib_sha="073f903be98e973ff38f4d79f2c48d61ef938754a77b1caedda79c9f05a068c2"
+    # bcd-duo (fork ausfowler/bcd-games, 2026-10-31): the public repository does not carry the iOS
+    # library, so the fork's build takes the copy inside BCD's own v0.1.623 release
+    # (Payload/Madeira.app/d3d12/libmetalirconverter.dylib, LC_UUID 0c028fc2a7f33101bb9e95016e60cb29).
+    # Xcode re-signed it when it packaged that release, which changes its bytes, so it has its own hash.
+    local ios_lib_sha_release="4865c8ec999833d8df0df69b8a52eb819adf452b0b12df7651c409425d311e3b"
     local have cand d
 
     [[ -f "$vend/SHA256SUMS" ]] || { _msc_fail "missing $vend/SHA256SUMS"; return 1; }
@@ -46,8 +51,8 @@ _msc_resolve() {
 
     [[ -f "$ios_lib" ]] || { _msc_fail "missing $ios_lib"; return 1; }
     have="$(shasum -a 256 "$ios_lib" | cut -d' ' -f1)"
-    [[ "$have" == "$ios_lib_sha" ]] ||
-        { _msc_fail "$ios_lib hash mismatch (expected $ios_lib_sha, found $have)"; return 1; }
+    [[ "$have" == "$ios_lib_sha" || "$have" == "$ios_lib_sha_release" ]] ||
+        { _msc_fail "$ios_lib hash mismatch (expected $ios_lib_sha or $ios_lib_sha_release, found $have)"; return 1; }
     MSC_LIB_IOS="$ios_lib"
 
     MSC_HAVE_PKG=0 MSC_ROOT="" MSC_PAYLOAD="" MSC_LIB_MACOS=""

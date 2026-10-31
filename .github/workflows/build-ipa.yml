@@ -1787,6 +1787,18 @@ jobs:
         shell: bash
         run: |
           INC="$GITHUB_WORKSPACE/madeira-d3d12/third_party/metal-shader-converter/include"
+          # bcd-duo: the public repository does not carry Apple's iOS converter library; the fork's
+          # build takes it from BCD's own v0.1.623 release, which ships it (Apple's agreement 2.B),
+          # and checks that copy's hash (build/madeira-d3d12/deps.sh).
+          LIB="$GITHUB_WORKSPACE/app/Madeira/d3d12/libmetalirconverter.dylib"
+          if [ ! -f "$LIB" ] && [ "${{ github.repository }}" = "ausfowler/bcd-games" ]; then
+            mkdir -p "$RUNNER_TEMP/bcd-release"
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/bcd-release/BCD.ipa" \
+              https://github.com/thebcd69/bcd-games/releases/download/v0.1.623/BCD.ipa
+            unzip -o -q "$RUNNER_TEMP/bcd-release/BCD.ipa" 'Payload/Madeira.app/d3d12/libmetalirconverter.dylib' -d "$RUNNER_TEMP/bcd-release"
+            cp "$RUNNER_TEMP/bcd-release/Payload/Madeira.app/d3d12/libmetalirconverter.dylib" "$LIB"
+            echo "::notice::Metal Shader Converter iOS library taken from BCD v0.1.623 ($(shasum -a 256 "$LIB" | cut -c1-16)...)"
+          fi
           if ! bash -c 'source build/madeira-d3d12/deps.sh'; then
             echo "::error::the vendored Metal Shader Converter does not match its pinned hashes (build/madeira-d3d12/deps.sh)"
             exit 1
