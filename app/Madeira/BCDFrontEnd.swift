@@ -113,7 +113,7 @@ struct BCDFrontEnd: View {
     @ViewBuilder private var content: some View {
         switch tab {
         case .home:
-            MCDHomeView(model: carousel, play: { store.actions?.play($0) }, openPage: { openedGame = $0 })
+            MCDHomeView(model: carousel, play: { playOrInstall($0) }, openPage: { openedGame = $0 })
                 .bcdGamePage($openedGame, from: "Home")
                 .onAppear { cardMenu.openPage = { openedGame = $0 } }
         case .library: BCDLibraryView(searchRequest: librarySearch)
@@ -135,7 +135,7 @@ struct BCDFrontEnd: View {
             if carousel.expanded {
                 list.append((BCDHint(button: .a, title: "Confirm"), {
                     guard let game = current else { return }
-                    if carousel.settingsFocused { openedGame = game } else { store.actions?.play(game) }
+                    if carousel.settingsFocused { openedGame = game } else { playOrInstall(game) }
                 }))
                 list.append((BCDHint(button: .b, title: "Back"), { carousel.setExpanded(false) }))
             } else {
@@ -236,6 +236,11 @@ struct BCDFrontEnd: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Menu")
+    }
+
+    /// The flipped card's main button: Play when the game is installed, else Install (to the device, BCD's default place).
+    private func playOrInstall(_ game: BCDGame) {
+        if game.state.isInstalled { store.actions?.play(game) } else { store.actions?.install(game, place: .device) }
     }
 
     /// The carousel's selected game (Home's backdrop).
