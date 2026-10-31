@@ -1726,7 +1726,7 @@ jobs:
           # image ships without it and "Generate DXMT shader headers" failed (run 41182469036).
           if xcrun -sdk macosx metal --version > metal-version.txt 2>&1; then
             head -3 metal-version.txt
-            echo "::notice::metal compiler already present"
+            echo "::notice::metal compiler already present: $(head -1 metal-version.txt) / $(xcodebuild -version | tr '\n' ' ')"
           else
             head -3 metal-version.txt
             echo "metal missing -- attempting download"
@@ -1747,9 +1747,18 @@ jobs:
           OUT="$GITHUB_WORKSPACE/build/dxmt-ios/shader-headers"
           mkdir -p "$OUT"
           cd "$OUT"
+          command -v xxd >/dev/null || echo "::error::xxd is not on this runner"
           for s in air_msad air_samplepos air_tessellation; do
-            xcrun -sdk macosx metal -o "$s.air" -c "$SHADERS/$s.metal" \
-              -std=metal3.1 --target=air64-apple-macos14.0
+            # bcd-duo: the compiler's own words become annotations (the raw log is not always
+            # reachable), and newer Metal compilers get two fallbacks before the step gives up.
+            ok=0
+            for flags in "-std=metal3.1 --target=air64-apple-macos14.0" "-std=metal3.1" "-std=metal3.2 --target=air64-apple-macos15.0"; do
+              if xcrun -sdk macosx metal -o "$s.air" -c "$SHADERS/$s.metal" $flags > "$s.err" 2>&1; then
+                ok=1; echo "::notice::$s.metal compiled with: $flags"; break
+              fi
+              echo "::warning::$s.metal failed with [$flags]: $(head -c 600 "$s.err" | tr '\n' ' ')"
+            done
+            [ "$ok" = 1 ] || { echo "::error::$s.metal did not compile with any flags"; exit 1; }
             # meson passes `xxd -n <basename>`; that flag is not in every xxd,
             # so rename the symbols instead (air_msad_air -> air_msad).
             xxd -i "$s.air" | sed "s/${s}_air/${s}/g" > "$s.h"
