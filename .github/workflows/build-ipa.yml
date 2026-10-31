@@ -1722,12 +1722,20 @@ jobs:
         shell: bash
         run: |
           xcodebuild -version
-          if xcrun -sdk macosx metal --version 2>&1 | head -3; then
+          # bcd-duo: test the compiler's own exit status. `metal --version | head -3` always
+          # succeeded (head's status), so the toolchain was never downloaded; GitHub's xcode-27
+          # image ships without it and "Generate DXMT shader headers" failed (run 41182469036).
+          if xcrun -sdk macosx metal --version > metal-version.txt 2>&1; then
+            head -3 metal-version.txt
             echo "::notice::metal compiler already present"
           else
+            head -3 metal-version.txt
             echo "metal missing -- attempting download"
             xcodebuild -downloadComponent MetalToolchain \
               || echo "::warning::-downloadComponent unsupported on this Xcode"
+            xcrun -sdk macosx metal --version 2>&1 | head -3
+            xcrun -sdk macosx metal --version > /dev/null 2>&1 \
+              || { echo "::error::no Metal compiler after the download"; exit 1; }
           fi
 
       # build/dxmt-ios/shader-headers/ is gitignored and nothing generated it,
