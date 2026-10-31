@@ -317,7 +317,8 @@ struct BCDFrontEnd: View {
                         Rectangle().fill(Color.white.opacity(0.18)).frame(width: 1, height: 18)
                     }
                     TimelineView(.everyMinute) { context in
-                        Text(context.date, format: .dateTime.hour().minute()).font(BCDStyle.label(16)).monospacedDigit()
+                        // Never `Text(date, format:)`: ICU date formatting killed BCD at launch (BCDFormat, udat_open).
+                        Text(MCDFormat.clock(context.date)).font(BCDStyle.label(16)).monospacedDigit()
                     }
                 }
                 .padding(.horizontal, 16).frame(height: 38)

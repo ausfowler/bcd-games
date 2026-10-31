@@ -53,7 +53,8 @@ enum MCDMotion {
             case let (x?, y?): return x > y
             case (_?, nil): return true
             case (nil, _?): return false
-            default: return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
+            // A plain comparison, no ICU collation (BCD avoids ICU in the interface: BCDFormat).
+            default: return a.title.lowercased() < b.title.lowercased()
             }
         }
     }
@@ -343,6 +344,12 @@ struct MCDChip: View {
 enum MCDFormat {
     static func minutes(_ value: Int) -> String {
         value < 60 ? "\(value) min" : "\(value / 60) h \(value % 60) min"
+    }
+    /// "9:41 PM" from BCD's own calendar arithmetic (BCDFormat.civil), never a date formatter.
+    static func clock(_ date: Date) -> String {
+        let c = BCDFormat.civil(date)
+        let hour = c.hour % 12 == 0 ? 12 : c.hour % 12
+        return "\(hour):\(c.minute < 10 ? "0" : "")\(c.minute) \(c.hour < 12 ? "AM" : "PM")"
     }
 }
 
