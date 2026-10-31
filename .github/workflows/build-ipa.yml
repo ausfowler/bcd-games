@@ -17,7 +17,9 @@ concurrency:
 jobs:
   build:
     # madeira-bcd: runs only in the owner's repository; a fork's run is skipped.
-    if: github.repository == 'thebcd69/madeira-bcd'
+    # bcd-duo: and in ausfowler/bcd-games (the iPhone Duo fork), which keeps its
+    # unsigned IPA as a run artifact instead of the owner's private bucket (below).
+    if: github.repository == 'thebcd69/madeira-bcd' || github.repository == 'ausfowler/bcd-games'
     runs-on: macos-15
     # contents: write only so the token can see DRAFT releases, which is where
     # the Metal Shader Converter installer is kept (drafts are not public).
@@ -3484,6 +3486,7 @@ jobs:
       # A signing/upload failure is caught by the private-bucket gate below.
       - name: Sign for OTA install (private bucket)
         id: ota
+        if: github.repository != 'ausfowler/bcd-games'   # bcd-duo: the fork has no bucket
         continue-on-error: true
         env:
           B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
@@ -3506,10 +3509,21 @@ jobs:
       # private R2 bucket (the OTA step above). If that step did not succeed,
       # the build fails here instead of keeping the IPA somewhere public.
       - name: Check the IPA reached the private bucket
-        if: steps.ota.outcome != 'success'
+        if: steps.ota.outcome != 'success' && github.repository != 'ausfowler/bcd-games'
         run: |
           echo "::error::OTA signing/upload did not succeed: this build's IPA was not kept anywhere (no GitHub artifact by design)"
           exit 1
+
+      # bcd-duo: the fork keeps its unsigned IPAs as a run artifact (SideStore,
+      # AltStore or LiveContainer sign them on the device when they install).
+      - name: Keep the unsigned IPAs (fork)
+        if: github.repository == 'ausfowler/bcd-games'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BCD-unsigned-${{ steps.bn.outputs.n }}
+          path: build-out/*-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
 
       # Full logs as an artifact -- the annotations above are truncated, and
       # digging them out of the raw job log is painful.
