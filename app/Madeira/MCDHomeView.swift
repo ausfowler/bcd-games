@@ -103,6 +103,10 @@ struct MCDHomeView: View {
             ZStack {
                 if games.isEmpty {
                     empty
+                } else if proxy.size.width < 80 || proxy.size.height < 80 {
+                    // The first layout pass can be zero-sized: no card is drawn until there is room, so no
+                    // scale of 0 ever reaches a division (a NaN position ends the app: CALayerInvalidGeometry).
+                    Color.clear
                 } else {
                     let selected = model.index(in: games)
                     carousel(games, selected: selected, size: proxy.size)
@@ -128,7 +132,9 @@ struct MCDHomeView: View {
     @ViewBuilder
     private func carousel(_ games: [BCDGame], selected: Int, size: CGSize) -> some View {
         // Claw Deck: card scale from width, bounded by height (Settings › Display › Carousel size is 100%).
-        let sc = min(size.width * 0.273 / 300, size.height * 0.46 / 300)
+        let sc = max(min(size.width * 0.273 / 300, size.height * 0.46 / 300), 0.05)
+        // The finger's travel in cards (0 when the scale is not usable).
+        let drag = MCDMath.finite(Double(dragged / (180 * sc)))
         let center = CGPoint(x: size.width / 2, y: size.height * 0.45)
         let first = max(selected - 5, 0), last = min(selected + 5, games.count - 1)
         // The farther cards first, so the nearer ones draw over them.
@@ -138,7 +144,7 @@ struct MCDHomeView: View {
                 let game = games[i]
                 let isSelected = i == selected
                 MCDCarouselCard(game: game,
-                                pos: Double(i - selected) + Double(dragged / (180 * sc)),
+                                pos: Double(i - selected) + drag,
                                 expand: isSelected && model.expanded ? 1 : 0,
                                 neighbourPush: model.expanded ? 1 : 0,
                                 sc: sc,
@@ -211,6 +217,8 @@ struct MCDCarouselCard: View, Animatable {
     }
 
     var body: some View {
+        let pos = MCDMath.finite(self.pos), expand = min(max(MCDMath.finite(self.expand), 0), 1)
+        let neighbourPush = min(max(MCDMath.finite(self.neighbourPush), 0), 1)
         let d = abs(pos)
         var scale = d < 1 ? 1.05 - 0.45 * d : max(0.65 - 0.05 * d, 0.2)
         scale += (1 - scale) * expand
@@ -339,6 +347,13 @@ struct MCDChip: View {
             .background(Capsule().fill(Color.white.opacity(0.10)))
             .overlay(Capsule().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
     }
+}
+
+/// Every number that reaches a frame, an offset or a position goes through here: SwiftUI hands a
+/// NaN or an infinity on to Core Animation, which ends the app (CALayerInvalidGeometry).
+enum MCDMath {
+    static func finite(_ value: Double, _ fallback: Double = 0) -> Double { value.isFinite ? value : fallback }
+    static func finite(_ value: CGFloat, _ fallback: CGFloat = 0) -> CGFloat { value.isFinite ? value : fallback }
 }
 
 enum MCDFormat {
