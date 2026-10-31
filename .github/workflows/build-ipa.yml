@@ -1748,6 +1748,17 @@ jobs:
           mkdir -p "$OUT"
           cd "$OUT"
           command -v xxd >/dev/null || echo "::error::xxd is not on this runner"
+          # bcd-duo: Xcode 27's Metal compiler takes a fifth argument in its internal
+          # __metal_atomic_fetch_add_explicit builtin, so air_tessellation.metal:153 stopped
+          # compiling (run 41188443940, Xcode 27.2 RC). The public atomic_fetch_add_explicit on
+          # the same threadgroup int is the same relaxed add and compiles on every Xcode.
+          TESS="$SHADERS/air_tessellation.metal"
+          OLD='__metal_atomic_fetch_add_explicit(out_count, 1, int(memory_order_relaxed), __METAL_MEMORY_SCOPE_THREADGROUP__)'
+          NEW='atomic_fetch_add_explicit(reinterpret_cast<threadgroup atomic_int *>(out_count), 1, memory_order_relaxed)'
+          if grep -qF "$OLD" "$TESS"; then
+            python3 -c "import sys;p,o,n=sys.argv[1:4];s=open(p).read();open(p,'w').write(s.replace(o,n))" "$TESS" "$OLD" "$NEW"
+            grep -qF "$NEW" "$TESS" && echo "::notice::air_tessellation.metal: public atomic_fetch_add_explicit in place of the internal builtin"
+          fi
           for s in air_msad air_samplepos air_tessellation; do
             # bcd-duo: the compiler's own words become annotations (the raw log is not always
             # reachable), and newer Metal compilers get two fallbacks before the step gives up.
