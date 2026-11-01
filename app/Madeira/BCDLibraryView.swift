@@ -345,17 +345,21 @@ struct BCDLibraryView: View {
             if !query.isEmpty && all.isEmpty {
                 Text("No game called \"\(query)\" here.").font(BCDStyle.body(15)).foregroundStyle(BCDStyle.textSoft)
             }
-            if showsDriveHint {
+            // The how-to line only under the last page, so it never takes a row's room.
+            if showsDriveHint && page == pages - 1 {
                 Label("To add a game of your own, copy its folder into BCD › wine › drive_c with the Files app, then choose Add a game.",
                       systemImage: "folder.badge.plus")
-                    .font(BCDStyle.body(14)).foregroundStyle(BCDStyle.textSoft)
+                    .font(BCDStyle.body(13)).foregroundStyle(BCDStyle.textSoft)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        // The rows are centred: what the 6 (or 3) columns do not use is padding at the sides.
+        .frame(width: CGFloat(g.columns) * g.cardWidth + CGFloat(g.columns - 1) * g.spacing, alignment: .leading)
+        .frame(maxWidth: .infinity)
         .id(page)
         .transition(.opacity.combined(with: .offset(y: 24)))
-        .padding(.horizontal, layout.gutter).padding(.top, 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.top, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
         // Touch: a swipe up or down turns the page.
         .gesture(DragGesture(minimumDistance: 30).onEnded { value in
@@ -379,8 +383,8 @@ struct BCDLibraryView: View {
             Text("Page \(nav.page + 1) of \(nav.pages)").font(BCDStyle.label(15))
             Text(nav.rangeText).font(BCDStyle.body(14)).foregroundStyle(BCDStyle.textSoft)
             pageButton("RT", "Next page", enabled: nav.page < nav.pages - 1) { nav.turn(1) }
-            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, layout.gutter).padding(.bottom, 6)
     }
 
@@ -405,31 +409,38 @@ struct BCDLibraryView: View {
     }
 }
 
-/// MCD: a Library page's geometry.
+/// MCD: a Library page's geometry. Landscape shows 12 games, 6 across in 2 rows (fewer, larger cards than a grid that fills
+/// the width); upright, 3 across in as many rows as fit (up to 4, so again at most 12). A card is as wide as its column allows
+/// and no taller than its row allows, and the rows are centred, so what is left over becomes padding at the sides.
 struct MCDLibraryGrid {
     let columns: Int, rows: Int
     let cardWidth: CGFloat, spacing: CGFloat, rowSpacing: CGFloat
 
+    /// The caption under a cover (title and state).
+    static let caption: CGFloat = 45
+
     init(size: CGSize, gutter: CGFloat, layout: BCDLayout) {
-        let sp: CGFloat = layout == .pad ? 20 : 14
-        let rsp: CGFloat = layout == .pad ? 22 : 16
-        let usableW = size.width - 2 * gutter, usableH = size.height - 10
-        var cols = 3, rowsFit = 1, width: CGFloat = 100
+        let sp: CGFloat = layout == .pad ? 22 : 18
+        let rsp: CGFloat = layout == .pad ? 22 : 14
+        let usableW = size.width - 2 * max(gutter, 24), usableH = size.height - 10
+        let portrait = layout == .phonePortrait || size.height > size.width * 1.1
+        let cols = portrait ? 3 : 6
+        var rowCount = 2
+        var width: CGFloat = 100
         if usableW.isFinite, usableH.isFinite, usableW > 120, usableH > 120 {
-            let minimum: CGFloat = layout == .pad ? 132 : 96
-            cols = layout == .phonePortrait ? 3 : max(2, Int((usableW + sp) / (minimum + sp)))
-            while true {
-                width = (usableW - sp * CGFloat(cols - 1)) / CGFloat(cols)
-                let height = width * 1.5 + 45   // a 2:3 cover and its two lines
-                rowsFit = Int((usableH + rsp) / (height + rsp))
-                if rowsFit >= 2 || cols >= 10 { break }
-                cols += 1
+            let byWidth = (usableW - sp * CGFloat(cols - 1)) / CGFloat(cols)
+            if portrait {
+                // As many rows of full-width cards as fit, from 2 to 4.
+                let rowH = byWidth * 1.5 + Self.caption
+                rowCount = min(max(Int((usableH + rsp) / (rowH + rsp)), 2), 4)
             }
+            let byHeight = ((usableH - rsp * CGFloat(rowCount - 1)) / CGFloat(rowCount) - Self.caption) / 1.5
+            width = min(byWidth, byHeight)
         }
         spacing = sp
         rowSpacing = rsp
         columns = cols
-        rows = max(rowsFit, 1)
+        rows = rowCount
         cardWidth = max(width, 40)
     }
 }

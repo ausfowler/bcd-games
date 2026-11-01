@@ -501,8 +501,10 @@ check(not [t for t in shown_text if re.search(r"page|absoluteString|html_url|htt
 check("if checker.showsChip" in chip and "var showsChip: Bool { autoCheck && state == .updateAvailable }" in updates
       and 'Text("Update available")' in chip, "updates: the chip shows only while checking automatically and a newer release exists")
 chips = block(front, "private var statusChips: some View")
-check("BCDUpdateChip { settingsSection = .updates; showSettings = true }" in chips
-      and "section: settingsSection" in front, "updates: the chip sits with the JIT chip and opens Settings at Updates")
+# MCD (fork, 2026-10-31): the update notice is a card in the bottom-left corner (in the top bar it widened the bar past the screen).
+check("MCDUpdateNotice { settingsSection = .updates; showSettings = true }" in front and "BCDUpdateChip" not in chips
+      and "checker.showsChip, let latest = checker.latest" in front
+      and "section: settingsSection" in front, "updates: the corner notice opens Settings at Updates; the top bar has no update chip")
 check('Label("Go to update"' in updates_view and "checker.checkNow()" in updates_view and "checker.autoCheck = $0" in updates_view
       and "model.go(to: .updates)" in views["BCDSettingsAbout.swift"],
       "updates: Go to update, Check for updates and Check automatically in Settings, reachable from About")

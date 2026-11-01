@@ -71,6 +71,11 @@ struct BCDFrontEnd: View {
             else if hintBarShown { hintBar }
         }
         // MCD: Home's backdrop is the selected game's art behind the whole shell, bars included (Claw Deck).
+        // MCD: a newer BCD is announced in the bottom-left corner, not in the top bar (it widened the bar past the screen).
+        .overlay(alignment: .bottomLeading) {
+            MCDUpdateNotice { settingsSection = .updates; showSettings = true }
+                .padding(.leading, layout.gutter).padding(.bottom, hintBarShown ? 58 : 14)
+        }
         .background {
             if tab == .home {
                 MCDBackdrop(game: homeGame)
@@ -232,8 +237,12 @@ struct BCDFrontEnd: View {
             MCDTabPill(tab: $tab, downloads: store.downloads.count).fixedSize()
             if focus.controllerActive { shoulder("RB") }
             if tab == .library {
-                Text("LIBRARY").font(BCDStyle.caps(15)).tracking(3).foregroundStyle(BCDStyle.lavender).fixedSize()
-                    .padding(.leading, 6)
+                // The label gives way when the bar is short of room, never the tabs or the buttons.
+                ViewThatFits(in: .horizontal) {
+                    Text("LIBRARY").font(BCDStyle.caps(15)).tracking(3).foregroundStyle(BCDStyle.lavender).fixedSize()
+                        .padding(.leading, 6)
+                    Color.clear.frame(width: 0, height: 0)
+                }
             }
             Spacer(minLength: 12)
             statusChips
@@ -338,7 +347,7 @@ struct BCDFrontEnd: View {
     /// this row. When the row is still short of room, the chips give way first, never the tabs or the clock.
     @ViewBuilder private var statusChips: some View {
         HStack(spacing: 12) {
-            BCDUpdateChip { settingsSection = .updates; showSettings = true }
+            // (BCD's "Update available" chip is the corner notice now: MCDUpdateNotice, over the shell.)
             ViewThatFits(in: .horizontal) {
                 systemChips(.full)
                 systemChips(.short)
@@ -486,6 +495,43 @@ enum BCDTab: String, CaseIterable, Identifiable {
         case .home: return "gamecontroller.fill"
         case .library: return "square.grid.2x2.fill"
         case .downloads: return "arrow.down.circle.fill"
+        }
+    }
+}
+
+/// MCD: BCD's update notice as a corner card (it was a chip in the top bar). Shown while BCD's own checker says a newer official
+/// BCD is out; in this fork the way to it is GitHub's Sync fork, so the card says so. Tap: Settings › Updates. ✕ hides it until a
+/// newer version than the one dismissed comes out.
+struct MCDUpdateNotice: View {
+    @ObservedObject private var checker = BCDUpdateChecker.shared
+    @AppStorage("mcd.update.dismissed") private var dismissed = ""
+    let open: () -> Void
+
+    var body: some View {
+        if checker.showsChip, let latest = checker.latest, latest.version != dismissed {
+            HStack(spacing: 12) {
+                Button(action: open) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.down.circle.fill").font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(BCDStyle.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("BCD \(latest.version) is out").font(BCDStyle.label(14))
+                            Text("Sync your fork to get it").font(BCDStyle.body(12)).foregroundStyle(BCDStyle.textSoft)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                Button { withAnimation(MCDMotion.pop) { dismissed = latest.version } } label: {
+                    Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(BCDStyle.textSoft)
+                        .frame(width: 26, height: 26).background(Circle().fill(Color.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Hide")
+            }
+            .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 10)
+            .bcdGlass(cornerRadius: 16)
+            .fixedSize()
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 }
