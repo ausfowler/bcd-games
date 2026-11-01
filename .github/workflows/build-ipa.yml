@@ -12,7 +12,9 @@ on:
 # multi-hour macOS jobs on the same commit.
 concurrency:
   # bcd-duo: in the fork, one build per branch (duo-support and clawdeck-ui build side by side).
-  group: ${{ github.repository == 'ausfowler/bcd-games' && format('build-ipa-{0}', github.ref) || 'build-ipa' }}
+  # (a re-run stuck in GitHub's queue since 2026-10-31 holds the old group name 'build-ipa-<ref>'; a new name keeps it
+  # from cancelling these builds if it ever starts)
+  group: ${{ github.repository == 'ausfowler/bcd-games' && format('mcd-build-{0}', github.ref) || 'build-ipa' }}
   cancel-in-progress: true
 
 jobs:

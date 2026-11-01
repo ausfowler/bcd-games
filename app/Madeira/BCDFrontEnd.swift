@@ -154,6 +154,20 @@ struct BCDFrontEnd: View {
                 }
                 return true
             }
+        } else if tab == .library {
+            // MCD: Claw Deck's grid -- the D-pad steps card by card through the whole library, LT/RT turn a page,
+            // and the page follows the ring (BCDLibraryView, MCDLibraryNav).
+            focus.steer = { direction in
+                guard tab == .library, !focus.layerOpen, !showSettings else { return false }
+                return MCDLibraryNav.shared.move(direction, focus: focus)
+            }
+            list.append((BCDHint(button: .a, title: "Open"), {}))
+            list.append((BCDHint(button: .leftTrigger, title: "Page"), { MCDLibraryNav.shared.page(-1, focus: focus) }))
+            list.append((BCDHint(button: .rightTrigger, title: "Page"), { MCDLibraryNav.shared.page(1, focus: focus) }))
+            if let game = BCDMenuModel.gameID(focused: focus.focused, store: store) {
+                list.append((BCDHint(button: .x, title: "Options"), { cardMenu.showCard(game) }))
+            }
+            list.append((BCDHint(button: .b, title: "Home"), { withAnimation(MCDMotion.pop) { tab = .home } }))
         } else {
             focus.steer = nil
             list.append((BCDHint(button: .a, title: tab == .downloads ? "Pause or resume" : "Open"), {}))
@@ -215,10 +229,10 @@ struct BCDFrontEnd: View {
     private var topBar: some View {
         HStack(spacing: 10) {
             if focus.controllerActive { shoulder("LB") }
-            MCDTabPill(tab: $tab, downloads: store.downloads.count)
+            MCDTabPill(tab: $tab, downloads: store.downloads.count).fixedSize()
             if focus.controllerActive { shoulder("RB") }
             if tab == .library {
-                Text("LIBRARY").font(BCDStyle.caps(15)).tracking(3).foregroundStyle(BCDStyle.lavender)
+                Text("LIBRARY").font(BCDStyle.caps(15)).tracking(3).foregroundStyle(BCDStyle.lavender).fixedSize()
                     .padding(.leading, 6)
             }
             Spacer(minLength: 12)
@@ -319,38 +333,51 @@ struct BCDFrontEnd: View {
             .accessibilityHidden(true)
     }
 
-    /// Claw Deck's status pill: the controller and its battery, BCD's JIT and update chips, the clock.
+    /// Claw Deck's status pill: BCD's update, JIT and memory chips, and the clock. The controller and its battery
+    /// sit in the hint bar (it is only there while a controller is in use), so plugging one in no longer squeezes
+    /// this row. When the row is still short of room, the chips give way first, never the tabs or the clock.
     @ViewBuilder private var statusChips: some View {
-        let system = store.system
         HStack(spacing: 12) {
             BCDUpdateChip { settingsSection = .updates; showSettings = true }
-            if layout != .phonePortrait || system.jit != .on {
-                BCDStatusChip(text: system.jit == .on ? "JIT on" : system.jit == .waiting ? "JIT…" : "JIT off",
-                              color: system.jit == .on ? BCDStyle.mint : Color(red: 1, green: 0.76, blue: 0.29))
+            ViewThatFits(in: .horizontal) {
+                systemChips(.full)
+                systemChips(.short)
+                systemChips(.dot)
             }
-            if layout == .pad, let limit = system.memoryLimitBytes {
-                BCDStatusChip(text: "Memory \(BCDFormat.bytes(limit))",
-                              color: system.increasedMemoryLimit ? BCDStyle.mint : Color(red: 1, green: 0.76, blue: 0.29))
-            }
+            .layoutPriority(1)
             if layout != .phonePortrait {
-                HStack(spacing: 12) {
-                    if let name = system.controllerName {
-                        Image(systemName: "gamecontroller.fill").font(.system(size: 17, weight: .semibold))
-                            .accessibilityLabel(name)
-                        if let battery = system.controllerBattery {
-                            Text("\(battery)%").font(BCDStyle.label(15)).foregroundStyle(BCDStyle.mint)
-                        }
-                        Rectangle().fill(Color.white.opacity(0.18)).frame(width: 1, height: 18)
-                    }
-                    TimelineView(.everyMinute) { context in
-                        // Never `Text(date, format:)`: ICU date formatting killed BCD at launch (BCDFormat, udat_open).
-                        Text(MCDFormat.clock(context.date)).font(BCDStyle.label(16)).monospacedDigit()
-                    }
+                TimelineView(.everyMinute) { context in
+                    // Never `Text(date, format:)`: ICU date formatting killed BCD at launch (BCDFormat, udat_open).
+                    Text(MCDFormat.clock(context.date)).font(BCDStyle.label(16)).monospacedDigit()
+                        .lineLimit(1).fixedSize()
                 }
                 .padding(.horizontal, 16).frame(height: 38)
                 .bcdGlass(cornerRadius: 19)
+                .fixedSize()
             }
         }
+    }
+
+    private enum ChipDetail { case full, short, dot }
+
+    /// JIT and (on a large screen) memory, in as many words as the row has room for.
+    private func systemChips(_ detail: ChipDetail) -> some View {
+        let system = store.system
+        let amber = Color(red: 1, green: 0.76, blue: 0.29)
+        return HStack(spacing: 8) {
+            if layout != .phonePortrait || system.jit != .on {
+                let jit = system.jit == .on ? "JIT on" : system.jit == .waiting ? "JIT…" : "JIT off"
+                MCDStatusChip(text: detail == .dot ? nil : (detail == .short ? "JIT" : jit), color: system.jit == .on ? BCDStyle.mint : amber)
+                    .accessibilityLabel(jit)
+            }
+            if layout == .pad, let limit = system.memoryLimitBytes {
+                let memory = "Memory \(BCDFormat.bytes(limit))"
+                MCDStatusChip(text: detail == .dot ? nil : (detail == .short ? BCDFormat.bytes(limit) : memory),
+                              color: system.increasedMemoryLimit ? BCDStyle.mint : amber)
+                    .accessibilityLabel(memory)
+            }
+        }
+        .fixedSize()
     }
 
     private var settingsButton: some View {
@@ -364,10 +391,24 @@ struct BCDFrontEnd: View {
         .accessibilityLabel("Settings")
     }
 
-    /// Claw Deck's footer: the buttons' hints in one centred glass capsule.
+    /// Claw Deck's footer: the controller and its battery, then the buttons' hints, in one glass capsule centred on
+    /// the whole screen (the Duo's status strip down one side no longer pulls it off centre).
     private var hintBar: some View {
         HStack(spacing: 24) {
-            ForEach(focus.hints.filter { $0.button != .leftShoulder && $0.button != .rightShoulder && $0.button != .menu }) { BCDHintView(hint: $0) }
+            if let name = store.system.controllerName {
+                HStack(spacing: 8) {
+                    Image(systemName: "gamecontroller.fill").font(.system(size: 16, weight: .semibold))
+                    if let battery = store.system.controllerBattery {
+                        Text("\(battery)%").font(BCDStyle.label(15)).foregroundStyle(BCDStyle.mint).monospacedDigit()
+                    }
+                }
+                .fixedSize()
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(name)
+                Rectangle().fill(Color.white.opacity(0.18)).frame(width: 1, height: 18)
+            }
+            // RT is drawn with LT ("LT RT · Page"), as on Claw Deck.
+            ForEach(focus.hints.filter { ![.leftShoulder, .rightShoulder, .menu, .rightTrigger].contains($0.button) }) { BCDHintView(hint: $0) }
         }
         .padding(.horizontal, 22).frame(height: 40)
         .bcdGlass(cornerRadius: 20)
@@ -375,6 +416,22 @@ struct BCDFrontEnd: View {
         .opacity(focus.layerOpen ? 0 : 1)
         .frame(maxWidth: .infinity).frame(height: 48)
         .padding(.bottom, 4)
+        .ignoresSafeArea(.container, edges: .horizontal)
+    }
+}
+
+/// A status chip that can shrink to its dot (BCDStatusChip's look; `text` nil draws the dot alone).
+struct MCDStatusChip: View {
+    let text: String?
+    let color: Color
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            if let text { Text(text).font(BCDStyle.label(12)).lineLimit(1).fixedSize() }
+        }
+        .padding(.horizontal, text == nil ? 8 : 10).padding(.vertical, 6)
+        .background(BCDStyle.surface, in: Capsule())
+        .overlay(Capsule().strokeBorder(BCDStyle.stroke, lineWidth: 1))
     }
 }
 
@@ -398,7 +455,7 @@ struct MCDTabPill: View {
         let on = tab == value
         return Button { withAnimation(MCDMotion.pop) { tab = value } } label: {
             Text(title)
-                .font(BCDStyle.caps(18)).tracking(3)
+                .font(BCDStyle.caps(18)).tracking(3).lineLimit(1).fixedSize()
                 .foregroundStyle(on ? Color.white : Color.white.opacity(0.42))
                 .padding(.horizontal, 18).frame(height: 40)
                 .background {

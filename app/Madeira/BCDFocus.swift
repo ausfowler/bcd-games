@@ -21,6 +21,8 @@ enum BCDMove { case up, down, left, right }
 
 enum BCDButton: Hashable {
     case a, b, x, y, leftShoulder, rightShoulder, menu, options
+    /// MCD (2026-10-31): the triggers turn pages (Claw Deck's LT/RT), in the Library.
+    case leftTrigger, rightTrigger
 }
 
 /// What one screen does with the buttons, and the hints the bottom bar shows for them.
@@ -253,6 +255,7 @@ struct BCDHint: Identifiable, Equatable {
                 (pad.buttonA, .a), (pad.buttonB, .b), (pad.buttonX, .x), (pad.buttonY, .y),
                 (pad.leftShoulder, .leftShoulder), (pad.rightShoulder, .rightShoulder),
                 (pad.buttonMenu, .menu), (pad.buttonOptions, .options),
+                (pad.leftTrigger, .leftTrigger), (pad.rightTrigger, .rightTrigger),
             ]
             for (input, button) in map where input?.isPressed == true { pressed.insert(button) }
         }
@@ -382,6 +385,9 @@ struct BCDHintView: View {
         case .rightShoulder: return "RB"
         case .menu: return "≡"
         case .options: return "⧉"
+        // Claw Deck draws the pair as one hint ("LT RT  Page"); the bar shows LT's and hides RT's.
+        case .leftTrigger: return "LT RT"
+        case .rightTrigger: return "RT"
         }
     }
 }

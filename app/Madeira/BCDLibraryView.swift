@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
+// Modified 2026-10-31 (ausfowler/bcd-games, Mobile Claw Deck): a controller-first grid -- the D-pad steps
+// card by card through the whole library (MCDLibraryNav), the page follows the ring, LT/RT turn a page.
 
 import SwiftUI
 
@@ -23,6 +25,10 @@ struct BCDLibraryView: View {
     @FocusState private var typing: Bool
     @State private var opened: BCDGame?
     @Environment(\.bcdMenu) private var menu
+    @EnvironmentObject private var focus: BCDFocus
+    /// The grid's width and the scroll view's height, for the column count and a page's rows.
+    @State private var gridWidth: CGFloat = 0
+    @State private var viewportHeight: CGFloat = 0
 
     private var filter: BCDLibraryFilter { BCDLibraryFilter.allCases.first { $0.rawValue == filterKey } ?? .all }
     private var sort: BCDLibrarySort { BCDLibrarySort(rawValue: sortKey) ?? (sortByName ? .name : .played) }
@@ -36,6 +42,7 @@ struct BCDLibraryView: View {
         VStack(alignment: .leading, spacing: 12) {
             filters
             if searching { searchField }
+            ScrollViewReader { scroller in
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
                     if let launcher { BCDLauncherPanel(spec: launcher) }   // a launcher's chip (Battle.net, EA app): its Install / Open card, no games
@@ -44,6 +51,7 @@ struct BCDLibraryView: View {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: layout == .pad ? 26 : 20) {
                         ForEach(shown) { game in
                             BCDCoverCard(game: game, focusID: "library.game.\(game.id)") { opened = game }
+                                .id("library.game.\(game.id)")
                         }
                     }
                     .bcdGlowLayer()
@@ -61,7 +69,23 @@ struct BCDLibraryView: View {
             }
             .modifier(BCDSoftTopEdge())
             .refreshable { store.actions?.refreshLibrary() }
+            // MCD: the page follows the ring, so the D-pad can walk the whole library (cards below the screen are
+            // only made when they come into view; scrolling to the focused one makes it).
+            .onChange(of: focus.focused) { _, id in
+                guard focus.controllerActive, let id, id.hasPrefix("library.game.") else { return }
+                withAnimation(.easeOut(duration: 0.22)) { scroller.scrollTo(id, anchor: .center) }
+            }
+            .background(GeometryReader { proxy in
+                Color.clear
+                    .onAppear { gridWidth = proxy.size.width; viewportHeight = proxy.size.height }
+                    .onChange(of: proxy.size) { _, size in gridWidth = size.width; viewportHeight = size.height }
+            })
+            }
         }
+        .onAppear { publishNav() }
+        .onChange(of: shown.map(\.id)) { _, _ in publishNav() }
+        .onChange(of: gridWidth) { _, _ in publishNav() }
+        .onChange(of: viewportHeight) { _, _ in publishNav() }
         .padding(.top, 4)
         .bcdGamePage($opened, from: "Library")
         // The game menu's "Game page" opens the page over the Library.
@@ -313,9 +337,72 @@ struct BCDLibraryView: View {
     private var columns: [GridItem] {
         switch layout {
         case .phonePortrait: return Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: 3)
-        case .phoneLandscape: return [GridItem(.adaptive(minimum: 96, maximum: 140), spacing: 14, alignment: .top)]
-        case .pad: return [GridItem(.adaptive(minimum: 132, maximum: 184), spacing: 20, alignment: .top)]
+        case .phoneLandscape: return Array(repeating: GridItem(.flexible(minimum: 96, maximum: 140), spacing: 14, alignment: .top), count: columnCount)
+        case .pad: return Array(repeating: GridItem(.flexible(minimum: 132, maximum: 184), spacing: 20, alignment: .top), count: columnCount)
         }
+    }
+
+    /// MCD: how many cards a row holds -- what `.adaptive(minimum:)` fitted (as many as fit at the minimum
+    /// width), made explicit so the D-pad can step a row at a time.
+    private var columnCount: Int {
+        let metrics: (minimum: CGFloat, spacing: CGFloat)
+        switch layout {
+        case .phonePortrait: return 3
+        case .phoneLandscape: metrics = (96, 14)
+        case .pad: metrics = (132, 20)
+        }
+        let minimum = metrics.minimum, spacing = metrics.spacing
+        let usable = gridWidth - 2 * layout.gutter
+        guard usable.isFinite, usable > minimum else { return 4 }
+        return max(1, Int((usable + spacing) / (minimum + spacing)))
+    }
+
+    /// Tells the navigator the cards in order, the row length and how many rows a page shows.
+    private func publishNav() {
+        let nav = MCDLibraryNav.shared
+        nav.ids = shown.map { "library.game.\($0.id)" }
+        nav.columns = columnCount
+        let cardWidth = max((gridWidth - 2 * layout.gutter) / CGFloat(max(columnCount, 1)), 80)
+        let rowHeight = cardWidth * 1.5 + 60   // a 2:3 cover and its two lines
+        nav.rowsPerPage = viewportHeight.isFinite && viewportHeight > 0 ? max(1, Int(viewportHeight / rowHeight)) : 2
+    }
+}
+
+/// MCD: the Library's controller navigation (Claw Deck's grid). The shell asks it to steer the D-pad while the
+/// Library is up (BCDFrontEnd.installButtons): on a card, Left/Right step one card (across rows), Up/Down one
+/// row, and LT/RT a page; off the cards (the filter chips), the focus finds its way as everywhere else.
+@MainActor final class MCDLibraryNav {
+    static let shared = MCDLibraryNav()
+    var ids: [String] = []
+    var columns = 1
+    var rowsPerPage = 2
+
+    /// One D-pad press; true when it was the Library's to take.
+    func move(_ direction: BCDMove, focus: BCDFocus) -> Bool {
+        guard let current = focus.focused, let i = ids.firstIndex(of: current), !ids.isEmpty else { return false }
+        let cols = max(columns, 1), last = ids.count - 1
+        let target: Int?
+        switch direction {
+        case .left: target = i > 0 ? i - 1 : nil
+        case .right: target = i < last ? i + 1 : nil
+        case .down:
+            // The row below, or the last card when the row below is shorter.
+            if i + cols <= last { target = i + cols } else if i / cols < last / cols { target = last } else { target = nil }
+        case .up:
+            guard i - cols >= 0 else { return false }   // from the first row: up to the filter chips
+            target = i - cols
+        }
+        if let target { withAnimation(.easeOut(duration: 0.12)) { focus.focused = ids[target] } }
+        return true
+    }
+
+    /// LT (-1) or RT (+1): a page of rows up or down, landing on the same column.
+    func page(_ delta: Int, focus: BCDFocus) {
+        guard !ids.isEmpty else { return }
+        let i = focus.focused.flatMap { ids.firstIndex(of: $0) } ?? 0
+        let step = max(columns, 1) * max(rowsPerPage, 1) * delta
+        let target = min(max(i + step, 0), ids.count - 1)
+        withAnimation(.easeOut(duration: 0.12)) { focus.focused = ids[target] }
     }
 }
 

@@ -248,6 +248,8 @@ struct BCDLiveFrontEnd: View {
         case "options": focus.press(.options)
         case "tab-previous": focus.press(.leftShoulder)
         case "tab-next": focus.press(.rightShoulder)
+        case "page-previous": focus.press(.leftTrigger)   // MCD: LT turns the Library a page up
+        case "page-next": focus.press(.rightTrigger)       // MCD: RT a page down
         default: break
         }
     }

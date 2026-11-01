@@ -109,7 +109,10 @@ final class LibraryController: ObservableObject, @unchecked Sendable {
         lock.lock(); self.enabled = enabled && allowed; owns = ownsInput; lock.unlock()
     }
     /// One sample of player 1's pad, in XInput button bits and stick units.
-    func sample(buttons raw: UInt16, lx: Int16, ly: Int16) {
+    /// MCD (2026-10-31): the triggers' last state (bit 1 LT, bit 2 RT), for the Library's page turns.
+    private var lastTriggers: UInt8 = 0
+
+    func sample(buttons raw: UInt16, lx: Int16, ly: Int16, lt: UInt8 = 0, rt: UInt8 = 0) {
         lock.lock()
         guard enabled else { lock.unlock(); return }
         var buttons = raw
@@ -118,6 +121,9 @@ final class LibraryController: ObservableObject, @unchecked Sendable {
             if ly > 16000 { buttons |= 1 }; if ly < -16000 { buttons |= 2 }
         }
         let pressed = buttons & ~last; last = buttons
+        // A trigger past half way counts as pressed (XInput's triggers are not button bits).
+        let triggers: UInt8 = (lt > 128 ? 1 : 0) | (rt > 128 ? 2 : 0)
+        let triggersPressed = triggers & ~lastTriggers; lastTriggers = triggers
         let own = owns, announce = !announced; announced = true
         var homeHeld = false
         if holdHome || BCDChordSetting.mode == .holdGuide { homeHeld = holdingHome(buttons) }   // BCD: env.MADEIRA_MENU_HOME_HOLD (opt-in), or the menu's "Hold Home"; off, nothing is timed
@@ -134,6 +140,8 @@ final class LibraryController: ObservableObject, @unchecked Sendable {
             for (mask, name): (UInt16, String) in [(1, "up"), (2, "down"), (4, "left"), (8, "right"), (0x1000, "accept"), (0x2000, "back"), (0x8000, "add"), (0x10, "menu"), (0x100, "tab-previous"), (0x200, "tab-next"), (0x4000, "x"), (0x20, "options")] {
                 if pressed & mask != 0 { command = name; break }
             }
+            if command == nil, triggersPressed & 1 != 0 { command = "page-previous" }
+            if command == nil, triggersPressed & 2 != 0 { command = "page-next" }
         }
         if homeHeld { command = "home" }
         if startHeld { command = "menu" }
