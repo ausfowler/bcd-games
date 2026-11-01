@@ -471,8 +471,13 @@ struct MCDLibraryGrid {
     }
 
     func update(_ layout: Layout) {
-        ids = layout.ids; columns = max(layout.columns, 1); rows = max(layout.rows, 1)
-        pages = max(1, (ids.count + perPage - 1) / perPage)
+        // Only what really changed is published (a rotation re-lays the grid; republishing the same values made more passes).
+        if ids != layout.ids { ids = layout.ids }
+        let c = max(layout.columns, 1), r = max(layout.rows, 1)
+        if columns != c { columns = c }
+        if rows != r { rows = r }
+        let p = max(1, (ids.count + perPage - 1) / perPage)
+        if pages != p { pages = p }
         if page > pages - 1 { page = pages - 1 }
     }
 

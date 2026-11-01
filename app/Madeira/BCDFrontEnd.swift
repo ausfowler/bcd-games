@@ -6,6 +6,7 @@
 // Library, Settings and every other destination; Claw Deck's top pill, status pill and hint bar.
 
 import SwiftUI
+import UIKit
 
 /// BCD's interface: the shell around Home, Library and Downloads (docs/BCD-UI-ARCHITECTURE.md).
 /// Tabs across the top (LB/RB), the device's state on the right, the buttons' hints along
@@ -74,6 +75,8 @@ struct BCDFrontEnd: View {
         }
         // MCD: Home's backdrop is the selected game's art behind the whole shell, bars included (Claw Deck).
         // MCD: a newer BCD is announced in the bottom-left corner, not in the top bar (it widened the bar past the screen).
+        // MCD: the window's side insets for the even sides (MCDEvenSides), measured where no padding can change them.
+        .background { MCDSafeAreaProbe().ignoresSafeArea().allowsHitTesting(false) }
         .overlay(alignment: .bottomLeading) {
             MCDUpdateNotice { settingsSection = .updates; showSettings = true }
                 .padding(.leading, layout.gutter).padding(.bottom, hintBarShown ? 58 : 14)
@@ -580,22 +583,58 @@ struct MCDUpdateNotice: View {
 /// MCD: content centred on the whole screen with even sides. In landscape the Duo keeps its status icons in a strip down one
 /// side (the safe area), and content laid out beside it sat off centre. This takes the content out to both screen edges and
 /// pads each side by the larger of the two insets, so it clears the strip and has the same room on the left as on the right.
+///
+/// The insets come from MCDSafeSides, measured by one full-screen probe that nothing here can resize. (An earlier version
+/// measured them from the padded view itself and set the padding from that during layout; on rotation the two fed each other
+/// and the app froze half way through the turn.)
 struct MCDEvenSides: ViewModifier {
-    @State private var side: CGFloat = 0
+    @ObservedObject private var sides = MCDSafeSides.shared
 
     func body(content: Content) -> some View {
         content
-            .padding(.horizontal, side)
+            .padding(.horizontal, sides.even)
             .ignoresSafeArea(.container, edges: .horizontal)
-            .background(GeometryReader { proxy in
-                Color.clear
-                    .onAppear { update(proxy.safeAreaInsets) }
-                    .onChange(of: proxy.safeAreaInsets) { _, insets in update(insets) }
-            })
     }
+}
 
-    private func update(_ insets: EdgeInsets) {
-        let wanted = max(insets.leading, insets.trailing)
-        if wanted.isFinite, abs(wanted - side) > 0.5 { side = wanted }
+/// The window's side insets, as the larger of left and right. Set from outside any layout pass (the next turn of the main
+/// queue), and only when it really changes.
+@MainActor final class MCDSafeSides: ObservableObject {
+    static let shared = MCDSafeSides()
+    @Published private(set) var even: CGFloat = 0
+    private var pending: CGFloat?
+
+    func report(_ insets: UIEdgeInsets) {
+        let value = max(insets.left, insets.right)
+        guard value.isFinite, value >= 0, value < 400 else { return }
+        guard abs(value - (pending ?? even)) > 0.5 else { return }
+        pending = value
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let value = self.pending else { return }
+            self.pending = nil
+            if abs(value - self.even) > 0.5 { self.even = value }
+        }
     }
+}
+
+/// An invisible full-window view that reports the window's safe-area insets (UIKit tells it when they change). It is the
+/// shell's background, ignoring the safe area, so its size never depends on the padding it causes.
+struct MCDSafeAreaProbe: UIViewRepresentable {
+    final class Probe: UIView {
+        override func safeAreaInsetsDidChange() {
+            super.safeAreaInsetsDidChange()
+            MCDSafeSides.shared.report(safeAreaInsets)
+        }
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil { MCDSafeSides.shared.report(safeAreaInsets) }
+        }
+    }
+    func makeUIView(context: Context) -> Probe {
+        let view = Probe()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        return view
+    }
+    func updateUIView(_ uiView: Probe, context: Context) {}
 }
