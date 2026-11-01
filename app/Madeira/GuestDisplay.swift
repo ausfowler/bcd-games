@@ -192,6 +192,10 @@ enum ResolutionChoices {
     /// application has scenes); true: the foreground scene's screen, else the main screen.
     private static func readScreen(scenes useScenes: Bool = true) -> Screen {
         #if canImport(UIKit)
+        // bcd-duo + BCD 0.1.626: the first read (App.init, before there are scenes) takes the foldable support's inner-display
+        // shape when its experimental switch is on (UIScreen.main is ambiguous on the foldable there); every later read
+        // follows the screen of the foreground scene, the cover display folded and the inner display open.
+        if !useScenes, let inner = BCDFoldable.innerScreen { return Screen(points: inner.points, pixels: inner.pixels) }
         let scenes = useScenes ? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene } : []
         let s = (scenes.first { $0.activationState == .foregroundActive } ?? scenes.first)?.screen ?? UIScreen.main
         let b = s.bounds, n = s.nativeBounds
