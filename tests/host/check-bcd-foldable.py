@@ -96,9 +96,13 @@ check("the root hook is one modifier on the root Group, before the navigation ti
       re.search(r"startDock: \{ startDock\(\$0, compactPool: \$1\) \}\)\n                \}\n            \}\n            \.modifier\(BCDFoldableWatch\(\)\)[^\n]*\n            \.navigationTitle\(\"BCD\"\)", content) is not None
       and content.count("BCDFoldableWatch()") == 1)
 display = (APP / "GuestDisplay.swift").read_text()
-check("the Resolution screen's hook is the first line of its UIKit branch, nil off the gate, and the old reading follows it untouched",
-      re.search(r"#if canImport\(UIKit\)\n        if let inner = BCDFoldable\.innerScreen \{ return Screen\(points: inner\.points, pixels: inner\.pixels\) \}[^\n]*\n"
-                r"        let b = UIScreen\.main\.bounds, n = UIScreen\.main\.nativeBounds\n"
+# Fork (ausfowler/bcd-games): the screen is read from the foreground scene (the Duo's cover or inner display), and the
+# foldable support's inner-display shape is the first read only (App.init, before there are scenes) when its switch is on.
+check("the Resolution screen's hook is the first code of its UIKit branch (the start-up read), nil off the gate, then the scene's screen",
+      re.search(r"#if canImport\(UIKit\)\n(        //[^\n]*\n)*        if !useScenes, let inner = BCDFoldable\.innerScreen \{ return Screen\(points: inner\.points, pixels: inner\.pixels\) \}\n"
+                r"        let scenes = useScenes \? UIApplication\.shared\.connectedScenes[^\n]*\n"
+                r"        let s = [^\n]*\n"
+                r"        let b = s\.bounds, n = s\.nativeBounds\n"
                 r"        return Screen\(points: CGSize\(width: max\(b\.width, b\.height\), height: min\(b\.width, b\.height\)\),\n", display) is not None
       and "static func screen(active: Bool) -> (points: CGSize, pixels: CGSize)? {\n        active ? (innerPoints, innerPixels) : nil" in pure)
 sections = (APP / "BCDSettingsSections.swift").read_text()
