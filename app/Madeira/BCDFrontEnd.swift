@@ -162,8 +162,8 @@ struct BCDFrontEnd: View {
                 return MCDLibraryNav.shared.move(direction, focus: focus)
             }
             list.append((BCDHint(button: .a, title: "Open"), {}))
-            list.append((BCDHint(button: .leftTrigger, title: "Page"), { MCDLibraryNav.shared.page(-1, focus: focus) }))
-            list.append((BCDHint(button: .rightTrigger, title: "Page"), { MCDLibraryNav.shared.page(1, focus: focus) }))
+            list.append((BCDHint(button: .leftTrigger, title: "Page"), { MCDLibraryNav.shared.turnPage(-1, focus: focus) }))
+            list.append((BCDHint(button: .rightTrigger, title: "Page"), { MCDLibraryNav.shared.turnPage(1, focus: focus) }))
             if let game = BCDMenuModel.gameID(focused: focus.focused, store: store) {
                 list.append((BCDHint(button: .x, title: "Options"), { cardMenu.showCard(game) }))
             }

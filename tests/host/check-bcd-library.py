@@ -115,9 +115,11 @@ check("Library: the MCD menu's Search the library opens the search (and closes i
       'items.append(BCDMenuItem(id: "mcd.search", title: "Search the library", symbol: "magnifyingglass") { librarySearch += 1 })' in shell
       and "case .library: BCDLibraryView(searchRequest: librarySearch)" in shell
       and ".onChange(of: searchRequest) { _, _ in toggleSearch() }" in library and "typing = searching" in library)
-check("Library: Refresh, a button and pull to refresh, calls the store's refreshLibrary",
+# MCD (fork, 2026-10-31): the Library is a paged grid (Claw Deck's), so there is no scroll view to pull; Refresh is
+# the toolbar's button (and the MCD menu's Refresh the library).
+check("Library: Refresh, the toolbar's button, calls the store's refreshLibrary; the grid is paged",
       'round("library.refresh", "arrow.clockwise", "Refresh the library") { store.actions?.refreshLibrary() }' in library
-      and ".refreshable { store.actions?.refreshLibrary() }" in library)
+      and "pagedGrid(in: proxy.size)" in library and "final class MCDLibraryNav: ObservableObject" in library)
 check("Library: signed out of Steam, a card offers the sign-in",
       "if steamShown, let steam, steam.available, steam.name == nil {" in library
       and 'Text("Sign in to Steam")' in library
