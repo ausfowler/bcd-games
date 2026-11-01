@@ -64,6 +64,8 @@ struct BCDFrontEnd: View {
                 if layout != .phonePortrait { topBar }
                 else { portraitTitle }
             }
+            // MCD: even room at both sides of the screen (the Duo's status strip sits down one side).
+            .modifier(MCDEvenSides())
             .zIndex(2)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -193,6 +195,11 @@ struct BCDFrontEnd: View {
     private func showMCDMenu() {
         guard !cardMenu.isOpen else { cardMenu.dismiss(); return }
         var items: [BCDMenuItem] = []
+        // The status the top bar shows (and the compact bar leaves out): JIT, and the memory limit when measured.
+        let system = store.system
+        var status = system.jit == .on ? "JIT on" : system.jit == .waiting ? "JIT starting" : "JIT off"
+        if let limit = system.memoryLimitBytes { status += " · Memory \(BCDFormat.bytes(limit))" }
+        items.append(BCDMenuItem(id: "mcd.status", title: "Status", symbol: "bolt.horizontal.circle", detail: status) { openSettings(.jit) })
         if tab != .home {
             items.append(BCDMenuItem(id: "mcd.home", title: "Home", symbol: "house.fill") { withAnimation(MCDMotion.pop) { tab = .home } })
         }
@@ -232,12 +239,23 @@ struct BCDFrontEnd: View {
 
     // MARK: Bars
 
+    /// MCD: the full bar when it fits, else the compact one (the Duo's closed screen on its side): a smaller tab pill, the
+    /// clock and the menu, with the gear and the JIT/memory status inside the menu. Whichever is shown fits the screen, so
+    /// the bar can never lay the whole app out wider than the display again.
     private var topBar: some View {
-        HStack(spacing: 10) {
+        ViewThatFits(in: .horizontal) {
+            topBarRow(compact: false)
+            topBarRow(compact: true)
+        }
+        .padding(.horizontal, layout.gutter).padding(.top, layout == .pad ? 12 : 8).padding(.bottom, 6)
+    }
+
+    private func topBarRow(compact: Bool) -> some View {
+        HStack(spacing: compact ? 8 : 10) {
             if focus.controllerActive { shoulder("LB") }
-            MCDTabPill(tab: $tab, downloads: store.downloads.count).fixedSize()
+            MCDTabPill(tab: $tab, downloads: store.downloads.count, compact: compact).fixedSize()
             if focus.controllerActive { shoulder("RB") }
-            if tab == .library {
+            if tab == .library && !compact {
                 // The label gives way when the bar is short of room, never the tabs or the buttons.
                 ViewThatFits(in: .horizontal) {
                     Text("LIBRARY").font(BCDStyle.caps(15)).tracking(3).foregroundStyle(BCDStyle.lavender).fixedSize()
@@ -246,11 +264,10 @@ struct BCDFrontEnd: View {
                 }
             }
             Spacer(minLength: 12)
-            statusChips
+            if compact { clockPill } else { statusChips }
             menuButton
-            settingsButton
+            if !compact { settingsButton }
         }
-        .padding(.horizontal, layout.gutter).padding(.top, layout == .pad ? 12 : 8).padding(.bottom, 6)
     }
 
     /// The MCD menu for touch (Y on a controller).
@@ -287,8 +304,10 @@ struct BCDFrontEnd: View {
         .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 6)
     }
 
+    /// The tab bar of an upright phone: its ground runs edge to edge (it stopped at the status strip on the Duo's closed
+    /// screen), and the three tabs sit together in the middle with the same room on both sides.
     private var portraitTabs: some View {
-        HStack {
+        HStack(spacing: 0) {
             ForEach(BCDTab.allCases) { item in
                 Button { tab = item } label: {
                     VStack(spacing: 4) {
@@ -304,9 +323,17 @@ struct BCDFrontEnd: View {
                 .buttonStyle(.plain)
             }
         }
+        .frame(maxWidth: 420)
+        .frame(maxWidth: .infinity)
         .padding(.top, 6)
-        .background(BCDStyle.ground.opacity(0.92).ignoresSafeArea(edges: .bottom))
-        .overlay(alignment: .top) { Rectangle().fill(BCDStyle.stroke).frame(height: 1) }
+        .modifier(MCDEvenSides())
+        .background(alignment: .top) {
+            ZStack(alignment: .top) {
+                BCDStyle.ground.opacity(0.92)
+                Rectangle().fill(BCDStyle.stroke).frame(height: 1)
+            }
+            .ignoresSafeArea(.container, edges: [.bottom, .horizontal])
+        }
     }
 
     private func tabButton(_ item: BCDTab) -> some View {
@@ -355,17 +382,20 @@ struct BCDFrontEnd: View {
                 systemChips(.dot)
             }
             .layoutPriority(1)
-            if layout != .phonePortrait {
-                TimelineView(.everyMinute) { context in
-                    // Never `Text(date, format:)`: ICU date formatting killed BCD at launch (BCDFormat, udat_open).
-                    Text(MCDFormat.clock(context.date)).font(BCDStyle.label(16)).monospacedDigit()
-                        .lineLimit(1).fixedSize()
-                }
-                .padding(.horizontal, 16).frame(height: 38)
-                .bcdGlass(cornerRadius: 19)
-                .fixedSize()
-            }
+            if layout != .phonePortrait { clockPill }
         }
+    }
+
+    /// The clock in its glass pill.
+    private var clockPill: some View {
+        TimelineView(.everyMinute) { context in
+            // Never `Text(date, format:)`: ICU date formatting killed BCD at launch (BCDFormat, udat_open).
+            Text(MCDFormat.clock(context.date)).font(BCDStyle.label(16)).monospacedDigit()
+                .lineLimit(1).fixedSize()
+        }
+        .padding(.horizontal, 16).frame(height: 38)
+        .bcdGlass(cornerRadius: 19)
+        .fixedSize()
     }
 
     private enum ChipDetail { case full, short, dot }
@@ -450,14 +480,16 @@ struct MCDStatusChip: View {
 struct MCDTabPill: View {
     @Binding var tab: BCDTab
     let downloads: Int
+    /// The narrow screen's pill: smaller capitals, and the download count as a small badge.
+    var compact = false
     @Namespace private var pill
 
     var body: some View {
         HStack(spacing: 4) {
             item(.home, "GAMES")
-            item(.downloads, downloads > 0 ? "DOWNLOADS · \(downloads)" : "DOWNLOADS")
+            item(.downloads, downloads > 0 && !compact ? "DOWNLOADS · \(downloads)" : "DOWNLOADS")
         }
-        .padding(4)
+        .padding(compact ? 3 : 4)
         .bcdGlass(cornerRadius: 26)
     }
 
@@ -465,9 +497,17 @@ struct MCDTabPill: View {
         let on = tab == value
         return Button { withAnimation(MCDMotion.pop) { tab = value } } label: {
             Text(title)
-                .font(BCDStyle.caps(18)).tracking(3).lineLimit(1).fixedSize()
+                .font(BCDStyle.caps(compact ? 13 : 18)).tracking(compact ? 1.8 : 3).lineLimit(1).fixedSize()
                 .foregroundStyle(on ? Color.white : Color.white.opacity(0.42))
-                .padding(.horizontal, 18).frame(height: 40)
+                .padding(.horizontal, compact ? 12 : 18).frame(height: compact ? 32 : 40)
+                .overlay(alignment: .topTrailing) {
+                    if compact && value == .downloads && downloads > 0 {
+                        Text("\(downloads)").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(BCDStyle.accent, in: Capsule())
+                            .offset(x: 4, y: -3)
+                    }
+                }
                 .background {
                     if on {
                         Capsule().fill(Color.white.opacity(0.16))
