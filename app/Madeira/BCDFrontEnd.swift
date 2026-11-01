@@ -124,8 +124,9 @@ struct BCDFrontEnd: View {
                 .ignoresSafeArea(.container, edges: .horizontal)
                 .bcdGamePage($openedGame, from: "Home")
                 .onAppear { cardMenu.openPage = { openedGame = $0 } }
-        case .library: BCDLibraryView(searchRequest: librarySearch)
-        case .downloads: BCDDownloadsView()
+        // MCD: the Library and Downloads are centred on the screen, with equal room at both sides (the hint bar's centre).
+        case .library: BCDLibraryView(searchRequest: librarySearch).modifier(MCDEvenSides())
+        case .downloads: BCDDownloadsView().modifier(MCDEvenSides())
         }
     }
 
@@ -533,5 +534,28 @@ struct MCDUpdateNotice: View {
             .fixedSize()
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
+    }
+}
+
+/// MCD: content centred on the whole screen with even sides. In landscape the Duo keeps its status icons in a strip down one
+/// side (the safe area), and content laid out beside it sat off centre. This takes the content out to both screen edges and
+/// pads each side by the larger of the two insets, so it clears the strip and has the same room on the left as on the right.
+struct MCDEvenSides: ViewModifier {
+    @State private var side: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, side)
+            .ignoresSafeArea(.container, edges: .horizontal)
+            .background(GeometryReader { proxy in
+                Color.clear
+                    .onAppear { update(proxy.safeAreaInsets) }
+                    .onChange(of: proxy.safeAreaInsets) { _, insets in update(insets) }
+            })
+    }
+
+    private func update(_ insets: EdgeInsets) {
+        let wanted = max(insets.leading, insets.trailing)
+        if wanted.isFinite, abs(wanted - side) > 0.5 { side = wanted }
     }
 }
