@@ -835,6 +835,16 @@ final class NativeStreamInputBridge {
             if button === gamepad.buttonA { onControllerHUDCommand?(.activate); return }
             if button === gamepad.buttonB { onControllerHUDCommand?(.back); return }
         }
+        // MCD: View + Menu together open and close the stream's controls, as Back + Start opens MCD's own in-game
+        // menu. Both are kept from the game until released (the one pressed first has already reached it).
+        if let options = gamepad.buttonOptions,
+           (button === gamepad.buttonMenu && options.isPressed) || (button === options && gamepad.buttonMenu.isPressed) {
+            blockedButtons.insert(ObjectIdentifier(gamepad.buttonMenu))
+            blockedButtons.insert(ObjectIdentifier(options))
+            setControllerHUDActive(!controllerHUDActive)
+            onControllerShortcut?(.controls)
+            return
+        }
         let action = controllerShortcuts.action(for: name)
         guard action != .none else { return }
         if action == .controls { setControllerHUDActive(!controllerHUDActive) }
@@ -855,6 +865,7 @@ final class NativeStreamInputBridge {
     }
 
     func attach() {
+        NotificationCenter.default.post(name: MCDCloudInput.willAttach, object: nil) // MCD: MCD's input code steps aside first
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(refreshDevices),
@@ -934,6 +945,7 @@ final class NativeStreamInputBridge {
         blockedAxesSlots.removeAll()
         shortcutButtonIDsBySlot.removeAll()
         lastHapticsAdvertisementAt = -.infinity
+        NotificationCenter.default.post(name: MCDCloudInput.didDetach, object: nil) // MCD: MCD's input code takes them back
     }
 
     func sendTouchMouseMove(dx: CGFloat, dy: CGFloat) {

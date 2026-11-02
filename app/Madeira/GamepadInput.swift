@@ -241,7 +241,35 @@ final class GamepadInput: @unchecked Sendable {
         setActive(UIApplication.shared.applicationState == .active)
     }
 
+    // MCD (2026-11-02): a cloud stream (MCD Cloud, MCDCloudPlayLive.swift) holds the pads' handlers and
+    // queue while it runs: a button or a profile has one handler at a time. Held, a pad that comes or
+    // goes is left to the stream (this reader would put its queue off the main thread, under the
+    // stream's handlers); released, the stream has set the handlers to nil, and every pad gets this
+    // reader's queue and handler back. The 4 ms sampler reads the pads all along, as it always does.
+    @MainActor private var cloudHeld = false
+
+    @MainActor func setCloudHold(_ held: Bool) {
+        guard held != cloudHeld else { return }
+        cloudHeld = held
+        guard !held, started, Self.enabled else { return }
+        refreshControllers()   // the queue for every pad, and the pads that came or went meanwhile
+        queue.async { [self] in
+            for case let profile? in profiles { installHandler(on: profile) }
+            fputs("[xinput] controllers back from a cloud stream\n", stderr)
+        }
+    }
+
+    /// The profile's handler: every change samples at once (the 4 ms timer samples regardless). On `queue`.
+    private func installHandler(on profile: GCExtendedGamepad) {
+        profile.valueChangedHandler = { [weak self] _, _ in
+            // Explicit queue hop also serializes callbacks already in flight
+            // when a controller is disconnected or the app resigns active.
+            self?.queue.async { [weak self] in self?.sample() }
+        }
+    }
+
     @MainActor private func refreshControllers() {
+        guard !cloudHeld else { return }   // MCD: a cloud stream holds the pads (setCloudHold)
         // Capture the live profile on main. Re-fetching extendedGamepad on the
         // polling queue yielded stale axes on devices tested in the fork.
         let live = GCController.controllers().compactMap { controller -> (GCController, GCExtendedGamepad)? in
@@ -271,11 +299,7 @@ final class GamepadInput: @unchecked Sendable {
                 // A pad joining a slot starts still, before sample() publishes it,
                 // rather than replaying the level the slot had before.
                 winios_gamepad_set_vibration(Int32(i), 0, 0)
-                profile.valueChangedHandler = { [weak self] _, _ in
-                    // Explicit queue hop also serializes callbacks already in flight
-                    // when a controller is disconnected or the app resigns active.
-                    self?.queue.async { [weak self] in self?.sample() }
-                }
+                installHandler(on: profile)
                 fputs("[xinput] ml1920 slot=\(i) connected\n", stderr)
             }
             // ml2106: the pad in each slot is where that slot's rumble plays

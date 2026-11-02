@@ -2,6 +2,7 @@
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
 // Modified 2026-11-02 (ausfowler/bcd-games, Mobile Claw Deck): starts MCD Cloud's card states (MCDCloudCardsLive).
+// Modified 2026-11-02 (phase 3): starts MCD Cloud's screen and stream (MCDCloudPlayLive).
 
 import SwiftUI
 import UIKit
@@ -71,6 +72,8 @@ struct BCDLiveFrontEnd: View {
                 // MCD Cloud: the cards' Cloud buttons, and the catalog for someone signed in to GeForce NOW
                 // (nothing of GeForce NOW starts for anyone else; MCDCloudCardsLive.swift).
                 MCDCloudCardsLive.shared.start()
+                // MCD Cloud's screen and stream: what Cloud on a card does (MCDCloudPlayLive.swift).
+                MCDCloudPlayLive.shared.start()
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }

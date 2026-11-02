@@ -5,6 +5,7 @@
 // (MCDHomeView.swift); LB/RB switch GAMES and DOWNLOADS; Y opens the MCD menu, which reaches the
 // Library, Settings and every other destination; Claw Deck's top pill, status pill and hint bar.
 // Modified 2026-11-02: the flipped card's Cloud button (MCD Cloud, layout A) and what A does on it.
+// Modified 2026-11-02 (phase 3): Cloud plays the game: MCD's cloud screen (MCDCloudPlay.swift) over the shell.
 
 import SwiftUI
 import UIKit
@@ -92,6 +93,8 @@ struct BCDFrontEnd: View {
         .coordinateSpace(name: BCDFocus.space)
         // The menu reads the focus and the layout from the environment: it sits inside them.
         .modifier(BCDMenuHost(model: cardMenu))
+        // MCD Cloud: the session's screen and the stream, over everything else in the shell (and its menus).
+        .modifier(MCDCloudHost(model: MCDCloudPlay.shared))
         .environment(\.bcdLayout, layout)
         .environment(\.bcdHintBar, hintBarShown)
         .environmentObject(focus)
@@ -313,10 +316,7 @@ struct BCDFrontEnd: View {
     private func cloudPressed(_ game: BCDGame) {
         switch MCDCloudCards.shared.state(game) {
         case .ready?:
-            cardMenu.show(BCDMenuContent(title: "Play with Cloud", items: [
-                BCDMenuItem(id: "mcd.cloud.next", title: "Streaming comes in the next MCD build", symbol: "cloud.fill",
-                            detail: "\(game.title) is on GeForce NOW, ready for it.") {},
-            ]))
+            MCDCloudPlay.shared.play(game)
         case .link(let store, _)?:
             MCDCloudCards.shared.link(store)
         case nil:

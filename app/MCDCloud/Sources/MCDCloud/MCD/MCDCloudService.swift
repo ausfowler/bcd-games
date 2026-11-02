@@ -5,8 +5,8 @@
 // MCD's whole interface to GeForce NOW. The app imports MCDCloud and sees only this file's public
 // names; everything behind them is OpenNOW's own code (../OpenNOW, MIT), unchanged but for the
 // patches listed in UPSTREAM.md. Phase 1 of the build plan: sign in, see the account, sign out.
-// Phase 2: which of MCD's games GeForce NOW has (availability), and linking a store. Streaming
-// comes in phase 3 through this same object.
+// Phase 2: which of MCD's games GeForce NOW has (availability), and linking a store. Phase 3:
+// playing one (MCDCloudStream.swift): the session's stage, the queue, the stream view.
 
 import Combine
 import CoreImage.CIFilterBuiltins
@@ -17,6 +17,8 @@ import UIKit
 struct CatalogIndex {
     struct Entry {
         let gameID: String
+        /// The catalog's game the version belongs to: what a launch asks GeForce NOW for.
+        let game: CloudGame
         let storefront: String
         let option: GameLaunchOption
         let owned: Bool
@@ -61,10 +63,47 @@ public final class MCDCloudService: ObservableObject {
     /// card's Cloud button shows may have changed (availability(...) below).
     @Published public private(set) var catalogRevision = 0
 
-    private var store: OpenNOWStore?
+    /// OpenNOW's store; module-internal, so MCDCloudStream.swift reaches it (the app cannot).
+    var store: OpenNOWStore?
     private var watching: Set<AnyCancellable> = []
     private var signInTask: Task<Void, Never>?
-    private var index = CatalogIndex()
+    var index = CatalogIndex()
+
+    // MARK: Phase 3: the session MCD started (MCDCloudStream.swift reads and writes these)
+
+    /// What the cloud session is doing now; nil when there is none and nothing MCD asked for is pending.
+    @Published public internal(set) var stage: Stage?
+    /// The game the session is for (the catalog's title).
+    @Published public internal(set) var sessionTitle: String?
+    /// Starting this game would end another game's session: MCD asks first.
+    @Published public internal(set) var conflict: Conflict?
+    /// NVIDIA's queue ad is playing (the free plan): MCD's queue screen shows queueAdView().
+    @Published public internal(set) var queueAd = false
+    /// OpenNOW's words for a problem the session has now (a poll failed, a resume failed); nil when none.
+    @Published public internal(set) var notice: String?
+    /// MCD asked for the session (play) and has not let it go (leave, dismissFailure).
+    var requested = false
+    /// play's own launch is running (OpenNOWStore.launch, awaited).
+    var launching = false
+    var launchTask: Task<Void, Never>?
+    /// A resume was asked for and OpenNOW has not yet started it (its reopen is a task of its own).
+    var resuming = false
+    var sawResumeLaunch = false
+    /// MCD asked to end the session (end): its going is expected, not a failure.
+    var endRequested = false
+    /// OpenNOW's sessionError when end() was asked: only a new one says the end failed.
+    var errorBeforeEnd: String?
+    /// Why the session MCD asked for did not start, or why it ended unasked.
+    var failure: String?
+    var requestedTitle: String?
+    /// The session the stream view is for, kept as OpenNOW's ContentView keeps it (presentedStreamerSession).
+    var presented: ActiveSession?
+    var streamRetries = 0
+    var lastActiveID: String?
+    /// The game play() would start once the conflict is confirmed.
+    var pendingPlay: PendingLaunchRequest?
+    /// The app's scene phase, handed to OpenNOW (observeScenePhase).
+    var sceneWatching: Set<AnyCancellable> = []
 
     /// Set while an account is signed in, so MCD starts the engine at launch only for someone who
     /// uses the Cloud (nothing of GeForce NOW runs, and nothing is sent, until then).
@@ -92,6 +131,7 @@ public final class MCDCloudService: ObservableObject {
                 MainActor.assumeIsolated { self?.rebuildIndex(all: all, library: library, connectors: connectors) }
             }
             .store(in: &watching)
+        observeScenePhase(of: store)
         read()
         Task { await store.bootstrap() }
     }
@@ -113,19 +153,42 @@ public final class MCDCloudService: ObservableObject {
         return availability(of: entry)
     }
 
+    /// One of MCD's games as the catalog is searched for it: by Steam app ID first when it has one,
+    /// then by title among `store`'s versions ("STEAM", "EPIC", "GOG"; nil for any).
+    public struct Request: Equatable, Sendable {
+        public let steamAppID: Int?
+        public let title: String
+        public let store: String?
+        public init(steamAppID: Int?, title: String, store: String?) {
+            self.steamAppID = steamAppID
+            self.title = title
+            self.store = store
+        }
+    }
+
+    /// The Cloud button's state for a game; nil when GeForce NOW does not have it or no one is signed in.
+    public func availability(_ request: Request) -> Availability? {
+        entry(for: request).map { availability(of: $0) }
+    }
+
+    /// The catalog version a request finds (the same search as availability: phase 2's matching).
+    func entry(for request: Request) -> CatalogIndex.Entry? {
+        guard account != nil else { return nil }
+        if let id = request.steamAppID, let entry = index.steam[id] { return entry }
+        var entries = index.titles[Self.titleKey(request.title)] ?? []
+        if let store = request.store {
+            let wanted = normalizeGameStore(store)
+            entries = entries.filter { normalizeGameStore($0.storefront).contains(wanted) }
+        }
+        return entries.first(where: \.owned) ?? entries.first
+    }
+
     /// A game by its title, for games without a Steam app ID (added from Files, Epic, GOG). Titles
     /// match exactly once letters and digits are kept and the case is dropped ("Overcooked! All You
     /// Can Eat" = "overcookedallyoucaneat"); nothing looser. `store` keeps the match to that store's
     /// versions ("EPIC", "GOG", "STEAM"), nil for any.
     public func availability(title: String, store: String?) -> Availability? {
-        guard account != nil else { return nil }
-        var entries = index.titles[Self.titleKey(title)] ?? []
-        if let store {
-            let wanted = normalizeGameStore(store)
-            entries = entries.filter { normalizeGameStore($0.storefront).contains(wanted) }
-        }
-        guard let entry = entries.first(where: \.owned) ?? entries.first else { return nil }
-        return availability(of: entry)
+        availability(Request(steamAppID: nil, title: title, store: store))
     }
 
     /// Links a store to the GeForce NOW account: NVIDIA's page for it opens in Safari, as in OpenNOW;
@@ -172,7 +235,7 @@ public final class MCDCloudService: ObservableObject {
         let owned = Set((library + all).flatMap(\.launchOptions).filter(\.isOwned).map(\.id))
         for game in library + all {
             for option in game.launchOptions {
-                let entry = CatalogIndex.Entry(gameID: game.id, storefront: option.storefront, option: option,
+                let entry = CatalogIndex.Entry(gameID: game.id, game: game, storefront: option.storefront, option: option,
                                                owned: owned.contains(option.id))
                 if normalizeGameStore(option.storefront) == "STEAM", let id = Self.steamAppID(option.storeURL) {
                     // Several catalog entries can name one Steam game (editions): the one in the library wins.
@@ -251,5 +314,6 @@ public final class MCDCloudService: ObservableObject {
         if code != codeSignIn { codeSignIn = code }
         if store.authError != error { error = store.authError }
         if Self.hasSignIn != (next != nil) { UserDefaults.standard.set(next != nil, forKey: Self.signedInKey) }
+        readSession()
     }
 }

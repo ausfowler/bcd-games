@@ -62,7 +62,7 @@ ART_SOURCES = ["https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/{name}",
 # Settings › Accounts, JIT and BCD Dock on the engine (their views: BCDAccounts/JIT/Dock.swift).
 ENGINE_BOUND |= {"BCDAccountsLive.swift", "BCDJITLive.swift", "BCDDockLive.swift"}
 # MCD (ausfowler/bcd-games, 2026-11-02): Settings › Cloud on MCD Cloud's engine (its view, MCDCloudSettings.swift, builds here).
-ENGINE_BOUND |= {"MCDCloudLive.swift", "MCDCloudCardsLive.swift"}
+ENGINE_BOUND |= {"MCDCloudLive.swift", "MCDCloudCardsLive.swift", "MCDCloudPlayLive.swift"}
 
 # The performance HUD (BCDHUDCore/View/Menu.swift never touch the engine and are built into the preview: -BCDTab overlay-1..4|custom|legacy|edit,
 # ingame-menu-hud[-custom]); its sampler, the session summary and crash question, and the screenshot read the engine and stay out.

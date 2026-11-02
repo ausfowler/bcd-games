@@ -1406,7 +1406,41 @@ final class HardwareInput: ObservableObject {
 
     // MARK: - keyboard
 
+    // MCD (2026-11-02): a cloud stream (MCD Cloud, MCDCloudPlayLive.swift) takes the keyboard's and the
+    // mice's handlers while it runs, and expects them on the main queue (it sets none itself). Held,
+    // this code lets go of them and attaches nothing; released (the stream has set them to nil), it
+    // wires every device again exactly as at launch (inventory).
+    private var cloudHeld = false
+
+    func setCloudHold(_ held: Bool) {
+        guard held != cloudHeld else { return }
+        cloudHeld = held
+        guard started, Self.enabled else { return }
+        guard held else {
+            inventory("cloud stream ended")
+            return
+        }
+        var mice = GCMouse.mice()
+        if let current = GCMouse.current, !mice.contains(where: { $0 === current }) { mice.append(current) }
+        for mouse in mice {
+            mouse.handlerQueue = .main
+            guard let m = mouse.mouseInput else { continue }
+            m.mouseMovedHandler = nil
+            m.leftButton.pressedChangedHandler = nil
+            m.rightButton?.pressedChangedHandler = nil
+            m.middleButton?.pressedChangedHandler = nil
+            for aux in m.auxiliaryButtons ?? [] { aux.pressedChangedHandler = nil }
+            m.scroll.valueChangedHandler = nil
+        }
+        if let kb = GCKeyboard.coalesced {
+            kb.handlerQueue = .main
+            kb.keyboardInput?.keyChangedHandler = nil
+        }
+        log("cloud stream: keyboard and \(mice.count) mice handed over")
+    }
+
     private func attachKeyboard(_ kb: GCKeyboard?) {
+        guard !cloudHeld else { return }   // MCD: a cloud stream holds it (setCloudHold)
         guard let kb else { return }
         guard let input = kb.keyboardInput else {
             if !keyboardConnected {
@@ -1595,6 +1629,7 @@ final class HardwareInput: ObservableObject {
     // `pressedChangedHandler` and `valueChangedHandler` on a button share one
     // type, so assigning to the wrong one type-checks and changes semantics.
     private func attachMouse(_ mouse: GCMouse?, why: String) {
+        guard !cloudHeld else { return }   // MCD: a cloud stream holds it (setCloudHold)
         guard let mouse else { return }
         let fresh = attachedMice.insert(ObjectIdentifier(mouse)).inserted
         guard let m = mouse.mouseInput else {

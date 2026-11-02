@@ -82,9 +82,9 @@ check("A8000F04 /* MCDCloud */" in target and "A1000F03 /* MCDCloud in Framework
 
 app = R / "app/Madeira"
 importers = sorted(p.name for p in app.rglob("*.swift") if re.search(r"^import MCDCloud$", p.read_text(), re.M))
-check(importers == ["MCDCloudCardsLive.swift", "MCDCloudLive.swift"], f"only the two engine-bound MCD Cloud files import MCDCloud ({importers})")
-check('ENGINE_BOUND |= {"MCDCloudLive.swift", "MCDCloudCardsLive.swift"}' in (R / "tools/ui-preview.py").read_text(),
-      "the preview tool keeps both engine-bound files out")
+check(importers == ["MCDCloudCardsLive.swift", "MCDCloudLive.swift", "MCDCloudPlayLive.swift"], f"only the three engine-bound MCD Cloud files import MCDCloud ({importers})")
+check('ENGINE_BOUND |= {"MCDCloudLive.swift", "MCDCloudCardsLive.swift", "MCDCloudPlayLive.swift"}' in (R / "tools/ui-preview.py").read_text(),
+      "the preview tool keeps the three engine-bound files out")
 check(".cloud: { AnyView(MCDCloudLiveSection(backHook: BCDSettingsSectionBack.shared.hook)) }" in (app / "BCDSettingsLive.swift").read_text(),
       "Settings › Cloud is wired in as a custom page")
 
@@ -107,6 +107,55 @@ check(all((legal / n).is_file() for n in ("MIT-OpenNOW.txt", "Apache-2.0-OpenSSL
 notices = (R / "THIRD-PARTY-NOTICES.md").read_text()
 check(all(f"| **{n}**" in notices for n in ("OpenNOW", "OpenSSL", "usrsctp", "WebRTC.framework")),
       "THIRD-PARTY-NOTICES.md names the four components")
+
+# Phase 3: playing in the cloud.
+mcd = PKG / "Sources/MCDCloud/MCD"
+stream = (mcd / "MCDCloudStream.swift").read_text()
+input_src = (sources / "NativeStreamInput.swift").read_text()
+attach = input_src[input_src.index("    func attach() {\n        NotificationCenter.default.post"):]
+attach = attach[:attach.index("\n    }\n")]
+detach = input_src[input_src.index("    func detach() {"):]
+detach = detach[:detach.index("\n    }\n")]
+check(attach.index("post(name: MCDCloudInput.willAttach") < attach.index("refreshDevices()")
+      and detach.rstrip().endswith("NotificationCenter.default.post(name: MCDCloudInput.didDetach, object: nil) // MCD: MCD's input code takes them back")
+      and detach.index("valueChangedHandler = nil") < detach.index("MCDCloudInput.didDetach"),
+      "OpenNOW says it takes the controllers before it sets a handler, and lets go after it has cleared them all")
+check('public static let willAttach = Notification.Name("MCDCloud.inputWillAttach")' in stream
+      and 'public static let didDetach = Notification.Name("MCDCloud.inputDidDetach")' in stream,
+      "MCDCloudInput names both moments, public to the app")
+live = (app / "MCDCloudPlayLive.swift").read_text()
+check(all(f"forName: MCDCloudInput.{n}, object: nil, queue: nil)" in live for n in ("willAttach", "didDetach")),
+      "MCD hears both at once, on the posting thread (a nil queue), before the stream goes on")
+aside = live[live.index("private func stepAside()"):live.index("private func takeBack()")]
+back = live[live.index("private func takeBack()"):live.index("nonisolated private static func onMain")]
+check(all(s in aside for s in ("hub.setOn(false)", "GamepadInput.shared.setCloudHold(true)", "HardwareInput.shared.setCloudHold(true)"))
+      and all(s in back for s in ("GamepadInput.shared.setCloudHold(false)", "HardwareInput.shared.setCloudHold(false)",
+                                  "if hubWasOn { BCDControllerHub.shared.setOn(true) }")),
+      "stepping aside lets go of the hub, XInput and keyboard and mouse; taking back restores all three")
+gamepad = (app / "GamepadInput.swift").read_text()
+refresh = gamepad[gamepad.index("@MainActor private func refreshControllers() {"):]
+check(refresh.split("\n")[1].strip().startswith("guard !cloudHeld else { return }")
+      and gamepad.count("installHandler(on: profile)") == 2 and "profile.valueChangedHandler = {" in gamepad
+      and gamepad.count("valueChangedHandler = { [weak self]") == 1,
+      "XInput attaches nothing while held, and puts one and the same handler back on every pad after")
+hardware = (app / "HardwareInput.swift").read_text()
+check(all(hardware[hardware.index(f"private func {f}("):].split("\n")[1].strip().startswith("guard !cloudHeld else { return }")
+          for f in ("attachKeyboard", "attachMouse"))
+      and 'inventory("cloud stream ended")' in hardware and "mouse.handlerQueue = .main" in hardware,
+      "keyboard and mice: nothing attached while held, every device wired again after, the stream's on the main queue")
+front = (app / "BCDFrontEnd.swift").read_text()
+check(".modifier(MCDCloudHost(model: MCDCloudPlay.shared))" in front and "MCDCloudPlay.shared.play(game)" in front
+      and "Streaming comes in the next MCD build" not in front,
+      "Cloud on a card plays the game, on MCD's cloud screen over the shell")
+check("MCDCloudPlayLive.shared.start()" in (app / "BCDLiveFrontEnd.swift").read_text(),
+      "the live front end installs the cloud screen's actions")
+host = (app / "MCDCloudPlay.swift").read_text()
+check(".onChange(of: model.stage == .streaming) { _, streaming in focus.enabled = !streaming }" in host,
+      "the interface reads no controller while the stream has it")
+for name, ident in (("MCDCloudPlay.swift", "A1000F08"), ("MCDCloudPlayLive.swift", "A1000F09")):
+    check(f"{ident} /* {name} in Sources */," in pbx, f"{name} is built into the app")
+check("NativeStreamPresentation {\n                StreamerView(" in stream and "QueueAdPlayerCard(ad: ad, compact: true)" in stream,
+      "the stream and the queue ads are OpenNOW's own views")
 
 print("check-mcd-cloud: " + ("FAIL" if failed else "PASS"))
 sys.exit(1 if failed else 0)

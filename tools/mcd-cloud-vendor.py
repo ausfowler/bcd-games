@@ -72,6 +72,36 @@ PATCHES = [
      "guard let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,",
      "guard let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first, // MCD: Documents is the user's folder in Files",
      "OpenNOW writes controller-rumble-status.json for diagnostics; in MCD, Documents is the folder you see in Files, so it goes to Caches."),
+    # Phase 3 (streaming). A controller button holds one handler at a time; MCD's own input code
+    # holds them outside a stream. OpenNOW says when it is about to take them and when it has let
+    # them go (it sets them to nil), so MCD steps aside first and takes them back after.
+    ("NativeStreamInput.swift",
+     "    func attach() {\n        NotificationCenter.default.addObserver(\n            self,\n            selector: #selector(refreshDevices),\n            name: NSNotification.Name.GCKeyboardDidConnect,",
+     "    func attach() {\n        NotificationCenter.default.post(name: MCDCloudInput.willAttach, object: nil) // MCD: MCD's input code steps aside first\n        NotificationCenter.default.addObserver(\n            self,\n            selector: #selector(refreshDevices),\n            name: NSNotification.Name.GCKeyboardDidConnect,",
+     "The stream's input says it is about to take the controllers, keyboard and mouse (MCDCloudInput.willAttach), before it sets their handlers."),
+    ("NativeStreamInput.swift",
+     "        shortcutButtonIDsBySlot.removeAll()\n        lastHapticsAdvertisementAt = -.infinity\n    }\n\n    func sendTouchMouseMove(",
+     "        shortcutButtonIDsBySlot.removeAll()\n        lastHapticsAdvertisementAt = -.infinity\n        NotificationCenter.default.post(name: MCDCloudInput.didDetach, object: nil) // MCD: MCD's input code takes them back\n    }\n\n    func sendTouchMouseMove(",
+     "The stream's input says it has let them go (MCDCloudInput.didDetach), after it has cleared their handlers."),
+    ("NativeStreamInput.swift",
+     "        if controllerHUDActive {\n            if button === gamepad.buttonA { onControllerHUDCommand?(.activate); return }\n            if button === gamepad.buttonB { onControllerHUDCommand?(.back); return }\n        }\n        let action = controllerShortcuts.action(for: name)\n",
+     "        if controllerHUDActive {\n            if button === gamepad.buttonA { onControllerHUDCommand?(.activate); return }\n            if button === gamepad.buttonB { onControllerHUDCommand?(.back); return }\n        }\n"
+     "        // MCD: View + Menu together open and close the stream's controls, as Back + Start opens MCD's own in-game\n"
+     "        // menu. Both are kept from the game until released (the one pressed first has already reached it).\n"
+     "        if let options = gamepad.buttonOptions,\n"
+     "           (button === gamepad.buttonMenu && options.isPressed) || (button === options && gamepad.buttonMenu.isPressed) {\n"
+     "            blockedButtons.insert(ObjectIdentifier(gamepad.buttonMenu))\n"
+     "            blockedButtons.insert(ObjectIdentifier(options))\n"
+     "            setControllerHUDActive(!controllerHUDActive)\n"
+     "            onControllerShortcut?(.controls)\n"
+     "            return\n"
+     "        }\n"
+     "        let action = controllerShortcuts.action(for: name)\n",
+     "View + Menu together open and close the stream's controls (OpenNOW's own shortcut is a single back button you assign first)."),
+    ("StreamLoadingView.swift",
+     "private struct QueueAdPlayerCard: View {\n",
+     "struct QueueAdPlayerCard: View { // MCD: not private, so MCD's queue screen plays NVIDIA's queue ads with it\n",
+     "The queue-ad player is visible to the rest of the module, so MCD's own queue screen can show it (GeForce NOW's free plan requires the ads)."),
 ]
 
 # OpenSSL's CRYPTOGAMS routines that GnuTLS defines too (proved again on every run, step 4).

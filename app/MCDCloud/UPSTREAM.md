@@ -13,6 +13,10 @@ hand: change the script's patches and run it again.
 - `OpenNOWiOSApp.swift`: MCD is the app: OpenNOW's @main entry point must not be compiled into it.
 - `OpenNOWiOSApp.swift`: Closes the block opened above.
 - `NativeStreamInput.swift`: OpenNOW writes controller-rumble-status.json for diagnostics; in MCD, Documents is the folder you see in Files, so it goes to Caches.
+- `NativeStreamInput.swift`: The stream's input says it is about to take the controllers, keyboard and mouse (MCDCloudInput.willAttach), before it sets their handlers.
+- `NativeStreamInput.swift`: The stream's input says it has let them go (MCDCloudInput.didDetach), after it has cleared their handlers.
+- `NativeStreamInput.swift`: View + Menu together open and close the stream's controls (OpenNOW's own shortcut is a single back button you assign first).
+- `StreamLoadingView.swift`: The queue-ad player is visible to the rest of the module, so MCD's own queue screen can show it (GeForce NOW's free plan requires the ads).
 
 ## OpenSSL routines renamed (prefix `mcd_ossl_`)
 

@@ -9,6 +9,8 @@
 //
 // Started once from BCDLiveFrontEnd's appearance: someone signed in to GeForce NOW gets the catalog
 // refreshed at launch (OpenNOW does that when it starts signed in); for anyone else nothing starts.
+//
+// Phase 3: the search is one MCDCloudService.Request (request(for:)), the same one Cloud plays with.
 
 import Combine
 import MCDCloud
@@ -34,24 +36,26 @@ import SwiftUI
     }
 
     static func state(for game: BCDGame, in service: MCDCloudService) -> MCDCloudCardState? {
-        let found: MCDCloudService.Availability?
-        switch game.store {
-        case .steam:
-            if case .steam(let appID)? = BCDLiveID.parse(game.id) {
-                found = service.availability(steamAppID: appID) ?? service.availability(title: game.title, store: "STEAM")
-            } else {
-                found = service.availability(title: game.title, store: "STEAM")
-            }
-        case .epic: found = service.availability(title: game.title, store: "EPIC")
-        case .gog: found = service.availability(title: game.title, store: "GOG")
-        case .local:
-            // The Windows desktop is not a game.
-            found = game.title == "Windows desktop" ? nil : service.availability(title: game.title, store: nil)
-        }
-        switch found {
+        switch request(for: game).flatMap({ service.availability($0) }) {
         case .ready?: return .ready
         case .needsLink(let store, let label)?: return .link(store: store, label: label)
         case nil: return nil
+        }
+    }
+
+    /// How the catalog is searched for a game (phase 2's rules; play uses the same search, so the
+    /// game a card offers is the game that starts). nil: the Windows desktop, which is not a game.
+    static func request(for game: BCDGame) -> MCDCloudService.Request? {
+        switch game.store {
+        case .steam:
+            // By app ID first; by title among GeForce NOW's Steam versions when the ID is not in the catalog.
+            var appID: Int?
+            if case .steam(let id)? = BCDLiveID.parse(game.id) { appID = id }
+            return MCDCloudService.Request(steamAppID: appID, title: game.title, store: "STEAM")
+        case .epic: return MCDCloudService.Request(steamAppID: nil, title: game.title, store: "EPIC")
+        case .gog: return MCDCloudService.Request(steamAppID: nil, title: game.title, store: "GOG")
+        case .local:
+            return game.title == "Windows desktop" ? nil : MCDCloudService.Request(steamAppID: nil, title: game.title, store: nil)
         }
     }
 }

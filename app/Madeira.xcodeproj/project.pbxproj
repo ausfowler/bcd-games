@@ -35,6 +35,8 @@
 		A1000F02 /* MCDCloudLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000F02 /* MCDCloudLive.swift */; };
 		A1000F06 /* MCDCloudCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000F06 /* MCDCloudCards.swift */; };
 		A1000F07 /* MCDCloudCardsLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000F07 /* MCDCloudCardsLive.swift */; };
+		A1000F08 /* MCDCloudPlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000F08 /* MCDCloudPlay.swift */; };
+		A1000F09 /* MCDCloudPlayLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000F09 /* MCDCloudPlayLive.swift */; };
 		A1000F03 /* MCDCloud in Frameworks */ = {isa = PBXBuildFile; productRef = A8000F04 /* MCDCloud */; };
 		A1000B15 /* BCDHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000B15 /* BCDHomeView.swift */; };
 		A1000B16 /* BCDLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000B16 /* BCDLibraryView.swift */; };
@@ -449,6 +451,8 @@
 		A2000F02 /* MCDCloudLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCDCloudLive.swift; sourceTree = "<group>"; };
 		A2000F06 /* MCDCloudCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCDCloudCards.swift; sourceTree = "<group>"; };
 		A2000F07 /* MCDCloudCardsLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCDCloudCardsLive.swift; sourceTree = "<group>"; };
+		A2000F08 /* MCDCloudPlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCDCloudPlay.swift; sourceTree = "<group>"; };
+		A2000F09 /* MCDCloudPlayLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCDCloudPlayLive.swift; sourceTree = "<group>"; };
 		A2000B15 /* BCDHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BCDHomeView.swift; sourceTree = "<group>"; };
 		A2000B16 /* BCDLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BCDLibraryView.swift; sourceTree = "<group>"; };
 		A2000B17 /* BCDDownloadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BCDDownloadsView.swift; sourceTree = "<group>"; };
@@ -919,6 +923,8 @@
 				A2000F02 /* MCDCloudLive.swift */,
 				A2000F06 /* MCDCloudCards.swift */,
 				A2000F07 /* MCDCloudCardsLive.swift */,
+				A2000F08 /* MCDCloudPlay.swift */,
+				A2000F09 /* MCDCloudPlayLive.swift */,
 				A2000B15 /* BCDHomeView.swift */,
 				A2000B16 /* BCDLibraryView.swift */,
 				A2000B17 /* BCDDownloadsView.swift */,
@@ -1525,6 +1531,8 @@
 				A1000F02 /* MCDCloudLive.swift in Sources */,
 				A1000F06 /* MCDCloudCards.swift in Sources */,
 				A1000F07 /* MCDCloudCardsLive.swift in Sources */,
+				A1000F08 /* MCDCloudPlay.swift in Sources */,
+				A1000F09 /* MCDCloudPlayLive.swift in Sources */,
 				A1000B15 /* BCDHomeView.swift in Sources */,
 				A1000B16 /* BCDLibraryView.swift in Sources */,
 				A1000B17 /* BCDDownloadsView.swift in Sources */,

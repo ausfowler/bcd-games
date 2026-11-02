@@ -239,7 +239,7 @@ struct MCDCloudSection<Backend: MCDCloudBackend>: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("A game played with Cloud runs on NVIDIA's servers and streams to this \(BCDSectionKit.deviceWord), so it does not need to be installed here.")
                     .bcdFont(.body, 14).fixedSize(horizontal: false, vertical: true)
-                BCDSectionKit.Note(text: "Games GeForce NOW has get a Cloud button on their card on Home. Streaming them comes next.",
+                BCDSectionKit.Note(text: "Games GeForce NOW has get a Cloud button on their card on Home: it plays them in the cloud. During a stream, View + Menu opens the stream's controls.",
                                    symbol: "sparkles", tone: .info)
                 BCDSectionKit.Note(text: "MCD streams with OpenNOW, an open-source GeForce NOW client. NVIDIA does not make or endorse it.",
                                    symbol: "exclamationmark.shield", tone: .soft)

@@ -278,7 +278,7 @@ private struct AdVideoView: UIViewControllerRepresentable {
   }
 }
 
-private struct QueueAdPlayerCard: View {
+struct QueueAdPlayerCard: View { // MCD: not private, so MCD's queue screen plays NVIDIA's queue ads with it
   @EnvironmentObject private var store: OpenNOWStore
   @Environment(\.openURL) private var openURL
   let ad: SessionAdInfo
