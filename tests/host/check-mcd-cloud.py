@@ -82,9 +82,9 @@ check("A8000F04 /* MCDCloud */" in target and "A1000F03 /* MCDCloud in Framework
 
 app = R / "app/Madeira"
 importers = sorted(p.name for p in app.rglob("*.swift") if re.search(r"^import MCDCloud$", p.read_text(), re.M))
-check(importers == ["MCDCloudLive.swift"], f"only MCDCloudLive.swift imports MCDCloud ({importers})")
-check('ENGINE_BOUND |= {"MCDCloudLive.swift"}' in (R / "tools/ui-preview.py").read_text(),
-      "the preview tool keeps MCDCloudLive.swift out")
+check(importers == ["MCDCloudCardsLive.swift", "MCDCloudLive.swift"], f"only the two engine-bound MCD Cloud files import MCDCloud ({importers})")
+check('ENGINE_BOUND |= {"MCDCloudLive.swift", "MCDCloudCardsLive.swift"}' in (R / "tools/ui-preview.py").read_text(),
+      "the preview tool keeps both engine-bound files out")
 check(".cloud: { AnyView(MCDCloudLiveSection(backHook: BCDSettingsSectionBack.shared.hook)) }" in (app / "BCDSettingsLive.swift").read_text(),
       "Settings › Cloud is wired in as a custom page")
 

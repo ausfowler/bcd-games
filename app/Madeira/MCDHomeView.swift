@@ -40,8 +40,10 @@ enum MCDMotion {
     }
     /// The selected card is flipped to its info side.
     @Published var expanded = false
-    /// On the flipped card: Play (false) or Settings (true).
-    @Published var settingsFocused = false
+    /// On the flipped card: the button the ring is on (Play or Install, Cloud, Settings).
+    @Published var cardButton: MCDCardButton = .main
+    /// Settings is the one the ring is on (the shell's older name for it).
+    var settingsFocused: Bool { cardButton == .settings }
 
     private static let key = "mcd.home.selected"
     init() { selectedID = UserDefaults.standard.string(forKey: Self.key) }
@@ -64,15 +66,26 @@ enum MCDMotion {
         return selectedID.flatMap { id in games.firstIndex { $0.id == id } } ?? 0
     }
 
-    /// Left/Right. On the flipped card they choose Play or Settings; otherwise they glide the carousel.
+    /// Left/Right. On the flipped card they step through its buttons (Play or Install, Cloud when the
+    /// game has it, Settings), stopping at the ends; otherwise they glide the carousel.
     func step(_ delta: Int, in games: [BCDGame]) {
         guard !games.isEmpty else { return }
         if expanded {
-            withAnimation(.easeOut(duration: 0.14)) { settingsFocused = delta > 0 }
+            let game = games[index(in: games)]
+            let buttons = MCDCloudCards.shared.buttons(game)
+            let at = buttons.firstIndex(of: button(for: game)) ?? 0
+            let next = buttons[min(max(at + delta, 0), buttons.count - 1)]
+            withAnimation(.easeOut(duration: 0.14)) { cardButton = next }
             return
         }
         let next = min(max(index(in: games) + delta, 0), games.count - 1)
         withAnimation(MCDMotion.glide) { selectedID = games[next].id }
+    }
+
+    /// The button the ring is on for this game: Cloud falls back to Play when the game has no Cloud
+    /// (signed out meanwhile, or the catalog changed).
+    func button(for game: BCDGame) -> MCDCardButton {
+        cardButton == .cloud && MCDCloudCards.shared.state(game) == nil ? .main : cardButton
     }
 
     func select(_ id: String) {
@@ -82,7 +95,7 @@ enum MCDMotion {
     func setExpanded(_ on: Bool) {
         withAnimation(MCDMotion.flip) {
             expanded = on
-            if on { settingsFocused = false }
+            if on { cardButton = .main }
         }
     }
 }
@@ -92,9 +105,12 @@ enum MCDMotion {
 struct MCDHomeView: View {
     @EnvironmentObject private var store: BCDStore
     @ObservedObject var model: MCDCarouselModel
-    /// Play and Settings on the flipped card (the shell's A does the same through the model).
+    /// Play, Cloud and Settings on the flipped card (the shell's A does the same through the model).
     let play: (BCDGame) -> Void
+    let cloud: (BCDGame) -> Void
     let openPage: (BCDGame) -> Void
+    /// Each card's Cloud button (MCDCloudCards): redrawn when the catalog or the account changes.
+    @ObservedObject private var cloudCards = MCDCloudCards.shared
     @State private var dragged: CGFloat = 0
 
     var body: some View {
@@ -154,8 +170,10 @@ struct MCDHomeView: View {
                                 sc: sc,
                                 backScale: backScale,
                                 selected: isSelected,
-                                settingsFocused: model.settingsFocused,
+                                focused: isSelected ? model.button(for: game) : .main,
+                                cloudState: isSelected ? cloudCards.state(game) : nil,
                                 play: { play(game) },
+                                cloud: { cloud(game) },
                                 settings: { openPage(game) })
                     .position(center)
                     .zIndex(isSelected ? 100 : Double(10 - abs(i - selected)))
@@ -214,8 +232,12 @@ struct MCDCarouselCard: View, Animatable {
     /// The flipped card's own scale (540 x 300 units, fitted to the screen).
     let backScale: CGFloat
     let selected: Bool
-    let settingsFocused: Bool
+    /// The flipped card's button the ring is on.
+    let focused: MCDCardButton
+    /// Its Cloud button (layout A: Play or Install · Cloud · gear); nil: Play · Settings, as before.
+    let cloudState: MCDCloudCardState?
     let play: () -> Void
+    let cloud: () -> Void
     let settings: () -> Void
 
     var animatableData: AnimatablePair<Double, AnimatablePair<Double, Double>> {
@@ -289,10 +311,14 @@ struct MCDCarouselCard: View, Animatable {
                     if let size = game.size { fact(game.state.isInstalled ? "Installed" : "Download", BCDFormat.bytes(size)) }
                 }
                 Spacer(minLength: 4 * s)
-                // Play 55%, Settings 45%: both labels fit whole ("Settings" was cut to "Setti...").
+                // Without Cloud: Play 55%, Settings 45%, both labels whole ("Settings" was cut to "Setti...").
+                // With Cloud (layout A): Play or Install, Cloud, and Settings as a 44-unit gear; Play keeps 55%
+                // of what is left, so it stays the widest button.
                 GeometryReader { row in
                     let gap = 10 * s
-                    let usable = max(row.size.width - gap, 2)
+                    let gear = 44 * s
+                    let usable = max(row.size.width - gap * (cloudState == nil ? 1 : 2), 2)
+                    let rest = max(usable - (cloudState == nil ? 0 : gear), 2)
                     HStack(spacing: gap) {
                         Button(action: play) {
                             HStack(spacing: 7 * s) {
@@ -300,18 +326,39 @@ struct MCDCarouselCard: View, Animatable {
                                 Text(game.state.isInstalled ? "Play" : "Install").font(BCDStyle.label(18 * s))
                             }
                             .lineLimit(1).minimumScaleFactor(0.5)
-                            .frame(width: usable * 0.55, height: 44 * s)
-                            .bcdFocusRing(!settingsFocused, cornerRadius: 12 * s)
+                            .frame(width: rest * 0.55, height: 44 * s)
+                            .bcdFocusRing(focused == .main, cornerRadius: 12 * s)
                         }
-                        Button(action: settings) {
-                            HStack(spacing: 6 * s) {
-                                Image(systemName: "gearshape.fill").font(.system(size: 14 * s, weight: .semibold))
-                                Text("Settings").font(BCDStyle.label(16 * s))
+                        if let cloudState {
+                            Button(action: cloud) {
+                                HStack(spacing: 6 * s) {
+                                    Image(systemName: cloudSymbol(cloudState)).font(.system(size: 15 * s, weight: .semibold))
+                                    Text(cloudTitle(cloudState)).font(BCDStyle.label(16 * s))
+                                }
+                                .lineLimit(1).minimumScaleFactor(0.5)
+                                .frame(width: rest * 0.45, height: 44 * s)
+                                .background(RoundedRectangle(cornerRadius: 12 * s, style: .continuous).fill(Color.white.opacity(0.06)))
+                                .bcdFocusRing(focused == .cloud, cornerRadius: 12 * s)
                             }
-                            .lineLimit(1).minimumScaleFactor(0.5)
-                            .frame(width: usable * 0.45, height: 44 * s)
-                            .background(RoundedRectangle(cornerRadius: 12 * s, style: .continuous).fill(Color.white.opacity(0.06)))
-                            .bcdFocusRing(settingsFocused, cornerRadius: 12 * s)
+                            .accessibilityLabel(cloudState == .ready ? "Play with Cloud" : cloudTitle(cloudState))
+                            Button(action: settings) {
+                                Image(systemName: "gearshape.fill").font(.system(size: 17 * s, weight: .semibold))
+                                    .frame(width: gear, height: 44 * s)
+                                    .background(RoundedRectangle(cornerRadius: 12 * s, style: .continuous).fill(Color.white.opacity(0.06)))
+                                    .bcdFocusRing(focused == .settings, cornerRadius: 12 * s)
+                            }
+                            .accessibilityLabel("Settings")
+                        } else {
+                            Button(action: settings) {
+                                HStack(spacing: 6 * s) {
+                                    Image(systemName: "gearshape.fill").font(.system(size: 14 * s, weight: .semibold))
+                                    Text("Settings").font(BCDStyle.label(16 * s))
+                                }
+                                .lineLimit(1).minimumScaleFactor(0.5)
+                                .frame(width: usable * 0.45, height: 44 * s)
+                                .background(RoundedRectangle(cornerRadius: 12 * s, style: .continuous).fill(Color.white.opacity(0.06)))
+                                .bcdFocusRing(focused == .settings, cornerRadius: 12 * s)
+                            }
                         }
                     }
                 }
@@ -326,6 +373,17 @@ struct MCDCarouselCard: View, Animatable {
         .frame(width: width, height: height)
         .bcdGlass(cornerRadius: shape.cornerSize.width)
         .shadow(color: .black.opacity(0.55), radius: 50 * s, y: 16 * s)
+    }
+
+    private func cloudTitle(_ state: MCDCloudCardState) -> String {
+        switch state {
+        case .ready: return "Cloud"
+        case .link(_, let label): return "Link \(label)"
+        }
+    }
+
+    private func cloudSymbol(_ state: MCDCloudCardState) -> String {
+        state == .ready ? "cloud.fill" : "link"
     }
 
     private func fact(_ title: String, _ value: String) -> some View {

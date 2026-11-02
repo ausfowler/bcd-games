@@ -4,6 +4,7 @@
 // Modified 2026-10-31 (ausfowler/bcd-games, Mobile Claw Deck): Home is MCD's carousel
 // (MCDHomeView.swift); LB/RB switch GAMES and DOWNLOADS; Y opens the MCD menu, which reaches the
 // Library, Settings and every other destination; Claw Deck's top pill, status pill and hint bar.
+// Modified 2026-11-02: the flipped card's Cloud button (MCD Cloud, layout A) and what A does on it.
 
 import SwiftUI
 import UIKit
@@ -110,7 +111,9 @@ struct BCDFrontEnd: View {
         .onChange(of: tab) { _, _ in installButtons() }
         // MCD: A and B mean different things on a flipped card; the bar follows.
         .onChange(of: carousel.expanded) { _, _ in installButtons() }
-        .onChange(of: carousel.settingsFocused) { _, _ in installButtons() }
+        .onChange(of: carousel.cardButton) { _, _ in installButtons() }
+        // MCD Cloud: a card can gain or lose its Cloud button when the catalog or the account changes.
+        .onReceive(MCDCloudCards.shared.$revision) { _ in installButtons() }
         // Settings and the game page lead the D-pad themselves while they are up; Home takes it back after.
         .onChange(of: showSettings) { _, open in if !open { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { installButtons() } } }
         .onChange(of: openedGame) { _, game in if game == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { installButtons() } } }
@@ -123,7 +126,7 @@ struct BCDFrontEnd: View {
     @ViewBuilder private var content: some View {
         switch tab {
         case .home:
-            MCDHomeView(model: carousel, play: { playOrInstall($0) }, openPage: { openedGame = $0 })
+            MCDHomeView(model: carousel, play: { playOrInstall($0) }, cloud: { cloudPressed($0) }, openPage: { openedGame = $0 })
                 // Centred on the whole screen: in landscape the Duo keeps its status icons in a strip down one side
                 // (the safe area), which pushed the carousel off centre. The bars still keep clear of the strip.
                 .ignoresSafeArea(.container, edges: .horizontal)
@@ -147,9 +150,24 @@ struct BCDFrontEnd: View {
             let games = MCDCarouselModel.order(store.games)
             let current: BCDGame? = games.isEmpty ? nil : games[carousel.index(in: games)]
             if carousel.expanded {
-                list.append((BCDHint(button: .a, title: "Confirm"), {
+                // The hint names what A does on the button the ring is on.
+                let title: String
+                if let game = current {
+                    switch carousel.button(for: game) {
+                    case .main: title = game.state.isInstalled ? "Play" : "Install"
+                    case .cloud: title = MCDCloudCards.shared.state(game).map(Self.cloudHint) ?? "Play"
+                    case .settings: title = "Settings"
+                    }
+                } else {
+                    title = "Confirm"
+                }
+                list.append((BCDHint(button: .a, title: title), {
                     guard let game = current else { return }
-                    if carousel.settingsFocused { openedGame = game } else { playOrInstall(game) }
+                    switch carousel.button(for: game) {
+                    case .main: playOrInstall(game)
+                    case .cloud: cloudPressed(game)
+                    case .settings: openedGame = game
+                    }
                 }))
                 list.append((BCDHint(button: .b, title: "Back"), { carousel.setExpanded(false) }))
             } else {
@@ -288,6 +306,29 @@ struct BCDFrontEnd: View {
     /// The flipped card's main button: Play when the game is installed, else Install (to the device, BCD's default place).
     private func playOrInstall(_ game: BCDGame) {
         if game.state.isInstalled { store.actions?.play(game) } else { store.actions?.install(game, place: .device) }
+    }
+
+    /// MCD Cloud: the card's Cloud button. Ready: streaming is phase 3 of the build plan, so for now it
+    /// says so in the menu card instead of doing nothing. A store to link: NVIDIA's page opens in Safari.
+    private func cloudPressed(_ game: BCDGame) {
+        switch MCDCloudCards.shared.state(game) {
+        case .ready?:
+            cardMenu.show(BCDMenuContent(title: "Play with Cloud", items: [
+                BCDMenuItem(id: "mcd.cloud.next", title: "Streaming comes in the next MCD build", symbol: "cloud.fill",
+                            detail: "\(game.title) is on GeForce NOW, ready for it.") {},
+            ]))
+        case .link(let store, _)?:
+            MCDCloudCards.shared.link(store)
+        case nil:
+            break
+        }
+    }
+
+    private static func cloudHint(_ state: MCDCloudCardState) -> String {
+        switch state {
+        case .ready: return "Play with Cloud"
+        case .link(_, let label): return "Link \(label)"
+        }
     }
 
     /// The carousel's selected game (Home's backdrop).

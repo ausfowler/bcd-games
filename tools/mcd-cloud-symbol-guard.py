@@ -48,9 +48,12 @@ unchecked = {}
 def defined(nm, archive):
     result = subprocess.run([nm, "-g", "-U", "-j", str(archive)], capture_output=True, text=True)
     if result.returncode != 0:
-        errors = [line for line in result.stderr.splitlines() if line.strip()]
+        # "<member>: no symbols" is nm saying a member is empty (build 41401306132 printed three for
+        # compiler_builtins), not that it could not read one: nothing to check, so not a warning.
+        errors = [line for line in result.stderr.splitlines() if line.strip() and not line.rstrip().endswith(": no symbols")]
         allowed = [line for line in errors if UNREADABLE_OK.search(line)]
-        if archive in CLOUD or not errors or not result.stdout.strip():
+        # A failure that says nothing, or reads nothing, is not understood: it stops, as for MCD Cloud's own.
+        if archive in CLOUD or not result.stderr.strip() or not result.stdout.strip():
             sys.exit(f"mcd-cloud-symbol-guard: {nm} could not read {archive}:\n{result.stderr.strip()}")
         others = [line for line in errors if not UNREADABLE_OK.search(line)]
         if others:

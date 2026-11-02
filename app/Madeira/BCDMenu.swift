@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
+// Modified 2026-11-02 (ausfowler/bcd-games, Mobile Claw Deck): the menu card is centred on the whole screen.
 
 import SwiftUI
 import UIKit
@@ -232,7 +233,10 @@ struct BCDMenuHost: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .overlay { if model.isOpen { menu.transition(.opacity) } }
+            // MCD: the card is centred on the whole screen, not beside the Duo's status strip (it sat
+            // half the strip's width left of centre); the hint bar keeps to the safe area, as the shell's.
+            .overlay { if model.isOpen { menu.ignoresSafeArea(.container, edges: .horizontal).transition(.opacity) } }
+            .overlay(alignment: .bottom) { if model.isOpen { hints.transition(.opacity) } }
             .animation(.easeOut(duration: 0.18), value: model.isOpen)
             .onChange(of: model.isOpen) { _, open in
                 if open {
@@ -262,16 +266,17 @@ struct BCDMenuHost: ViewModifier {
                 BCDGameQuestionView(question: asked.question, prefix: Self.layer + "ask.") { model.answer($0) }
             }
         }
-        .overlay(alignment: .bottom) {
-            // An upright phone's shell shows no hint bar (its tabs are at the bottom): neither does the menu.
-            if focus.controllerActive && !focus.hints.isEmpty && layout != .phonePortrait {
-                HStack(spacing: 22) {
-                    Spacer()
-                    ForEach(focus.hints) { BCDHintView(hint: $0) }
-                }
-                .padding(.horizontal, layout.gutter).frame(height: 40)
-                .allowsHitTesting(false)
+    }
+
+    @ViewBuilder private var hints: some View {
+        // An upright phone's shell shows no hint bar (its tabs are at the bottom): neither does the menu.
+        if focus.controllerActive && !focus.hints.isEmpty && layout != .phonePortrait {
+            HStack(spacing: 22) {
+                Spacer()
+                ForEach(focus.hints) { BCDHintView(hint: $0) }
             }
+            .padding(.horizontal, layout.gutter).frame(height: 40)
+            .allowsHitTesting(false)
         }
     }
 

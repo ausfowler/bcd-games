@@ -4,13 +4,27 @@
 //
 // MCD's whole interface to GeForce NOW. The app imports MCDCloud and sees only this file's public
 // names; everything behind them is OpenNOW's own code (../OpenNOW, MIT), unchanged but for the
-// patches listed in UPSTREAM.md. Phase 1 of docs (the build plan): sign in, see the account, sign
-// out. The catalog and streaming come in later phases through this same object.
+// patches listed in UPSTREAM.md. Phase 1 of the build plan: sign in, see the account, sign out.
+// Phase 2: which of MCD's games GeForce NOW has (availability), and linking a store. Streaming
+// comes in phase 3 through this same object.
 
 import Combine
 import CoreImage.CIFilterBuiltins
 import Foundation
 import UIKit
+
+/// The catalog as MCD looks games up in it (MCDCloudService.rebuildIndex).
+struct CatalogIndex {
+    struct Entry {
+        let gameID: String
+        let storefront: String
+        let option: GameLaunchOption
+        let owned: Bool
+    }
+    var steam: [Int: Entry] = [:]
+    var titles: [String: [Entry]] = [:]
+    var connectors: [String: AccountConnector] = [:]
+}
 
 @MainActor
 public final class MCDCloudService: ObservableObject {
@@ -43,9 +57,14 @@ public final class MCDCloudService: ObservableObject {
     /// The last sign-in failure, in OpenNOW's words; nil once a new sign-in starts.
     @Published public private(set) var error: String?
 
+    /// Changes whenever the catalog, the GeForce NOW library or the linked stores change: what a
+    /// card's Cloud button shows may have changed (availability(...) below).
+    @Published public private(set) var catalogRevision = 0
+
     private var store: OpenNOWStore?
     private var watching: Set<AnyCancellable> = []
     private var signInTask: Task<Void, Never>?
+    private var index = CatalogIndex()
 
     /// Set while an account is signed in, so MCD starts the engine at launch only for someone who
     /// uses the Cloud (nothing of GeForce NOW runs, and nothing is sent, until then).
@@ -65,8 +84,113 @@ public final class MCDCloudService: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in MainActor.assumeIsolated { self?.read() } }
             .store(in: &watching)
+        // The catalog, the library and the linked stores, each as OpenNOW publishes it (it refreshes
+        // all three after a sign-in and at start when signed in); the index is rebuilt once they settle.
+        Publishers.CombineLatest3(store.$allGames, store.$libraryGames, store.$accountConnectors)
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .sink { [weak self] all, library, connectors in
+                MainActor.assumeIsolated { self?.rebuildIndex(all: all, library: library, connectors: connectors) }
+            }
+            .store(in: &watching)
         read()
         Task { await store.bootstrap() }
+    }
+
+    // MARK: Which games play with Cloud
+
+    /// What a game's Cloud button does: play (`ready`), or first link the store GeForce NOW needs.
+    public enum Availability: Equatable, Sendable {
+        case ready
+        /// GeForce NOW has the game for this store, it is not in the GeForce NOW library, and that
+        /// store is not linked to the account: `label` is NVIDIA's name for the store ("Steam").
+        case needsLink(store: String, label: String)
+    }
+
+    /// The game GeForce NOW has under this Steam app ID (read from each catalog entry's Steam store
+    /// address, store.steampowered.com/app/<id>). nil: not on GeForce NOW, or signed out.
+    public func availability(steamAppID: Int) -> Availability? {
+        guard account != nil, let entry = index.steam[steamAppID] else { return nil }
+        return availability(of: entry)
+    }
+
+    /// A game by its title, for games without a Steam app ID (added from Files, Epic, GOG). Titles
+    /// match exactly once letters and digits are kept and the case is dropped ("Overcooked! All You
+    /// Can Eat" = "overcookedallyoucaneat"); nothing looser. `store` keeps the match to that store's
+    /// versions ("EPIC", "GOG", "STEAM"), nil for any.
+    public func availability(title: String, store: String?) -> Availability? {
+        guard account != nil else { return nil }
+        var entries = index.titles[Self.titleKey(title)] ?? []
+        if let store {
+            let wanted = normalizeGameStore(store)
+            entries = entries.filter { normalizeGameStore($0.storefront).contains(wanted) }
+        }
+        guard let entry = entries.first(where: \.owned) ?? entries.first else { return nil }
+        return availability(of: entry)
+    }
+
+    /// Links a store to the GeForce NOW account: NVIDIA's page for it opens in Safari, as in OpenNOW;
+    /// the linked stores are read again a few times over the next minute.
+    public func link(store key: String) {
+        guard let store,
+              let connector = store.accountConnectors.first(where: { normalizeGameStore($0.store) == normalizeGameStore(key) })
+        else { return }
+        Task {
+            await store.connectAccountConnector(connector) { url in
+                UIApplication.shared.open(url)
+            }
+        }
+    }
+
+    private func availability(of entry: CatalogIndex.Entry) -> Availability {
+        if entry.owned { return .ready }
+        if let connector = index.connectors[normalizeGameStore(entry.storefront)], connector.supported, !connector.isLinked {
+            return .needsLink(store: connector.store, label: connector.label)
+        }
+        return .ready
+    }
+
+    static func titleKey(_ title: String) -> String {
+        var kept = String.UnicodeScalarView()
+        for scalar in title.lowercased().unicodeScalars where CharacterSet.alphanumerics.contains(scalar) {
+            kept.append(scalar)
+        }
+        return String(kept)
+    }
+
+    /// A Steam app ID from a Steam store address (https://store.steampowered.com/app/892970/Valheim/).
+    static func steamAppID(_ address: String?) -> Int? {
+        guard let address, let url = URL(string: address), let host = url.host?.lowercased(),
+              host == "steampowered.com" || host.hasSuffix(".steampowered.com") else { return nil }
+        let parts = url.pathComponents
+        guard let at = parts.firstIndex(of: "app"), at + 1 < parts.count, let id = Int(parts[at + 1]), id > 0 else { return nil }
+        return id
+    }
+
+    private func rebuildIndex(all: [CloudGame], library: [CloudGame], connectors: [AccountConnector]) {
+        var next = CatalogIndex()
+        // A version is in the library when either list says so (OpenNOW merges them the same way).
+        let owned = Set((library + all).flatMap(\.launchOptions).filter(\.isOwned).map(\.id))
+        for game in library + all {
+            for option in game.launchOptions {
+                let entry = CatalogIndex.Entry(gameID: game.id, storefront: option.storefront, option: option,
+                                               owned: owned.contains(option.id))
+                if normalizeGameStore(option.storefront) == "STEAM", let id = Self.steamAppID(option.storeURL) {
+                    // Several catalog entries can name one Steam game (editions): the one in the library wins.
+                    if let kept = next.steam[id], kept.owned || !entry.owned { continue }
+                    next.steam[id] = entry
+                }
+                let key = Self.titleKey(game.title)
+                guard !key.isEmpty else { continue }
+                var list = next.titles[key] ?? []
+                if !list.contains(where: { $0.option.id == option.id }) { list.append(entry) }
+                next.titles[key] = list
+            }
+        }
+        for connector in connectors {
+            next.connectors[normalizeGameStore(connector.store)] = connector
+        }
+        index = next
+        catalogRevision &+= 1
     }
 
     /// NVIDIA's sign-in page in Apple's secure sign-in sheet.
