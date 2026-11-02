@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Mobile Claw Deck (MCD), a fork of BCD (https://github.com/thebcd69/bcd-games) by ausfowler.
 // Added 2026-11-02. Includes work from BCD by thebcd69.
+// Modified 2026-11-02 (phase 4b): Stream shape (fit the screen, 16:9, 16:10 or 4:3).
 //
 // Settings › Cloud: the GeForce NOW account MCD streams with. Sign in with NVIDIA's page (Apple's
 // secure sign-in sheet) or with a code entered on another device (the way with a controller), see
@@ -49,6 +50,8 @@ struct MCDCloudSection<Backend: MCDCloudBackend>: View {
     var backHook: BCDSectionKit.BackHook? = nil
     @EnvironmentObject private var focus: BCDFocus
     @State private var confirmingSignOut = false
+    /// Stream shape (phase 4b): MCDCloud's MCDStreamFit reads the same key ("auto" fits the screen).
+    @AppStorage(MCDCloudShape.key) private var shape = MCDCloudShape.auto
 
     private static var prefix: String { "settings.cloud." }
 
@@ -58,6 +61,7 @@ struct MCDCloudSection<Backend: MCDCloudBackend>: View {
             BCDSectionKit.Columns {
                 accountCard
             } right: {
+                shapeCard
                 aboutCard
             }
         }
@@ -232,6 +236,24 @@ struct MCDCloudSection<Backend: MCDCloudBackend>: View {
         return tenths.truncatingRemainder(dividingBy: 10) == 0 ? "\(Int(tenths / 10)) h" : "\(Int(tenths) / 10).\(abs(Int(tenths)) % 10) h"
     }
 
+    // MARK: Stream shape
+
+    private var shapeCard: some View {
+        BCDSectionKit.Card(eyebrow: "Stream shape", symbol: "aspectratio") {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(MCDCloudShape.choices, id: \.value) { choice in
+                    BCDSectionKit.ChoiceRow(title: choice.title, detail: choice.detail, symbol: choice.symbol,
+                                            selected: MCDCloudShape.normalized(shape) == choice.value,
+                                            id: Self.prefix + "shape." + choice.value) {
+                        shape = choice.value
+                    }
+                }
+                Text("A game already streaming keeps its shape: the choice is for the next session.")
+                    .bcdFont(.body, 13).foregroundStyle(BCDStyle.textSoft).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     // MARK: About
 
     private var aboutCard: some View {
@@ -245,5 +267,35 @@ struct MCDCloudSection<Backend: MCDCloudBackend>: View {
                                    symbol: "exclamationmark.shield", tone: .soft)
             }
         }
+    }
+}
+
+/// Settings › Cloud › Stream shape: the GeForce NOW shape a new session asks for. MCDCloud's MCDStreamFit reads the same
+/// UserDefaults key and the same values (16:9, 16:10 and 4:3 are GeForce NOW's own names; anything else fits the screen).
+enum MCDCloudShape {
+    static let key = "mcd.cloud.shape"
+    static let auto = "auto"
+
+    struct Choice {
+        let value: String
+        let title: String
+        let detail: String
+        let symbol: String
+    }
+
+    static let choices: [Choice] = [
+        Choice(value: auto, title: "Fit this screen",
+               detail: "The shape closest to the screen a session starts on (4:3 on the Duo, open or closed).", symbol: "aspectratio"),
+        Choice(value: "16:9", title: "16:9",
+               detail: "Widescreen, the shape most games are made for.", symbol: "rectangle.ratio.16.to.9"),
+        Choice(value: "16:10", title: "16:10",
+               detail: "A little taller than widescreen.", symbol: "rectangle"),
+        Choice(value: "4:3", title: "4:3",
+               detail: "Squarer. Fills the unfolded Duo, but some games add bars at their sides.", symbol: "rectangle.ratio.4.to.3"),
+    ]
+
+    /// A stored value as one of the choices ("auto" for anything else).
+    static func normalized(_ stored: String) -> String {
+        choices.contains { $0.value == stored } ? stored : auto
     }
 }

@@ -2,6 +2,7 @@
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
 // Modified 2026-11-02 (ausfowler/bcd-games, Mobile Claw Deck): Cloud is one of the pages drawn elsewhere (MCDCloudLive.swift).
+// Modified 2026-11-02 (phase 4b): inside a page drawn elsewhere, the controller stays in that page (steer).
 
 import SwiftUI
 import UIKit
@@ -198,7 +199,27 @@ struct BCDSettingsReading: Identifiable {
             }
             return true
         }
-        return apply(navigator.move(move, from: focus?.focused))
+        let outcome = navigator.move(move, from: focus?.focused)
+        if case .pass = outcome, let focus, let id = focus.focused, Self.inSection(id), let rect = focus.frame(of: id) {
+            // MCD (2026-11-02): a section drawn elsewhere (Accounts, JIT, Dock, Cloud) reports no order, so its rows
+            // were walked by the focus's nearest-control rule over the whole screen: at the bottom of a section, the
+            // nearest control below was the next row of the list, and Down left the section for the next one. Inside
+            // a section the ring now stays among that section's controls: Up, Down and Right stop at its edge, and
+            // Left with nothing of the section to the left goes back to the list, as on Settings' own pages.
+            if BCDFocusSteppers.step(id, move) { return true }   // a value under the ring steps, as BCDFocus.move does
+            if let next = focus.nearest(from: rect, toward: move, allowed: Self.inSection) {
+                setFocus(next)
+            } else if move == .left {
+                apply(.leave(selected))
+            }
+            return true
+        }
+        return apply(outcome)
+    }
+
+    /// A control of the section shown (not the list's rows or Done): where the ring stays inside a section.
+    nonisolated static func inSection(_ id: String) -> Bool {
+        id != BCDSettingsID.done && !id.hasPrefix(BCDSettingsID.listPrefix)
     }
 
     /// B: a question or a text closes first, then a section, then Settings.

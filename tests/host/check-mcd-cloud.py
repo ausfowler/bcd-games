@@ -162,12 +162,13 @@ table = re.findall(r'\.init\(value: "(\d+)x(\d+)", aspectRatio: "([\d:]+)", tier
 aspects = re.search(r'static let aspectRatioOptions = \[([^\]]+)\]', store_src).group(1).replace('"', "").replace(" ", "").split(",")
 plans = {"free": 0, "priority": 1, "ultimate": 2}
 import math
-def fit(w, h, plan, max_fps):
+def fit(w, h, plan, max_fps, fixed=None):
     w, h = max(w, h), min(w, h)
     shape = w / h
     def ratio(a):
         x, y = a.split(":"); return float(x) / float(y)
-    aspect = min(aspects, key=lambda a: abs(math.log(ratio(a) / shape)))   # first of equals, as Swift's min
+    fixed = fixed if fixed in aspects else None   # MCDStreamFit.fixedShape ("auto" and unknown values fit the screen)
+    aspect = fixed or min(aspects, key=lambda a: abs(math.log(ratio(a) / shape)))   # first of equals, as Swift's min
     allowed = [(int(a), int(b)) for a, b, asp, p in table if asp == aspect and plans[p] <= plan]
     fitting = [s for s in allowed if s[0] <= w and s[1] <= h]
     pick = max(fitting, key=lambda s: s[0] * s[1]) if fitting else min(allowed, key=lambda s: s[0] * s[1])
@@ -179,6 +180,21 @@ check(fit(951 * 3, 669 * 3, 2, 120) == ("4:3", "1600x1200", 120), "... on Ultima
 check(fit(932 * 3, 430 * 3, 1, 120) == ("20:9", "2400x1080", 60) and fit(932 * 3, 430 * 3, 0, 60) == ("20:9", "1600x720", 60),
       "an iPhone Pro Max: 20:9, 2400x1080 on Performance, 1600x720 free")
 fit_src = (mcd / "MCDStreamFit.swift").read_text()
+# Phase 4b: Settings › Cloud › Stream shape fixes the shape; the size is still the largest that fits the screen.
+check(fit(951 * 3, 669 * 3, 1, 120, "16:10") == ("16:10", "2560x1600", 60)
+      and fit(678 * 3, 466 * 3, 1, 120, "16:10") == ("16:10", "1920x1200", 60), "16:10 on the Duo: 2560x1600 open, 1920x1200 closed (Performance)")
+check(fit(951 * 3, 669 * 3, 1, 120, "16:9") == ("16:9", "2560x1440", 60) and fit(951 * 3, 669 * 3, 0, 60, "16:10") == ("16:10", "1920x1200", 60),
+      "16:9 open: 2560x1440; the free plan stops at 1920x1200")
+check(fit(951 * 3, 669 * 3, 1, 120, "auto") == duo_open and fit(678 * 3, 466 * 3, 1, 120) == ("4:3", "1600x1200", 60),
+      "'Fit this screen' is the phase 4 rule (4:3 on the Duo, open or closed)")
+check("let aspect = fixedShape(shape) ?? StreamSettingsResolver.aspectRatioOptions.min {" in fit_src
+      and 'stored != "auto", StreamSettingsResolver.aspectRatioOptions.contains(stored)' in fit_src
+      and 'static let shapeKey = "mcd.cloud.shape"' in fit_src
+      and "shape: UserDefaults.standard.string(forKey: MCDStreamFit.shapeKey))" in stream, "MCDStreamFit takes the shape Settings chose")
+cloud_settings = (app / "MCDCloudSettings.swift").read_text()
+check('static let key = "mcd.cloud.shape"' in cloud_settings and "@AppStorage(MCDCloudShape.key)" in cloud_settings
+      and all(f'Choice(value: "{a}"' in cloud_settings for a in ["16:9", "16:10", "4:3"]) and "Choice(value: auto" in cloud_settings,
+      "Settings › Cloud writes that key: Fit this screen, 16:9, 16:10, 4:3")
 check("let fitting = allowed.filter { size($0).width <= width && size($0).height <= height }" in fit_src
       and "(plan >= .ultimate && maxFPS >= 120) ? 120 : 60" in fit_src, "MCDStreamFit is that rule")
 check("settingsOverride: screen" in stream and 'guard settings.preferredResolution == "Auto" else { return nil }' in stream,

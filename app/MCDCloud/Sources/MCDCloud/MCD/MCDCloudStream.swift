@@ -177,7 +177,8 @@ extension MCDCloudService {
         readSession()
     }
 
-    /// OpenNOW's settings with the mode for the screen the app is on (MCDStreamFit), for a new session; nil
+    /// OpenNOW's settings with the mode for the screen the app is on (MCDStreamFit) and the shape Settings › Cloud
+    /// chose (phase 4b), for a new session; nil
     /// keeps OpenNOW's own (no scene to measure, or a resolution someone chose that is not Auto).
     func screenSettings(_ store: OpenNOWStore) -> AppSettings? {
         var settings = store.settings
@@ -189,7 +190,8 @@ extension MCDCloudService {
         let tier = store.subscription?.membershipTier ?? store.user?.membershipTier
         let fit = MCDStreamFit.choose(pixels: CGSize(width: points.width * scale, height: points.height * scale),
                                       plan: StreamSettingsResolver.plan(for: tier),
-                                      maxFPS: scene.screen.maximumFramesPerSecond)
+                                      maxFPS: scene.screen.maximumFramesPerSecond,
+                                      shape: UserDefaults.standard.string(forKey: MCDStreamFit.shapeKey))
         settings.preferredAspectRatio = fit.aspectRatio
         settings.preferredResolution = fit.resolution
         settings.preferredFPS = fit.fps

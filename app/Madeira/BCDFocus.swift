@@ -2,6 +2,7 @@
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
 // Modified 2026-10-31 (ausfowler/bcd-games, Mobile Claw Deck): Claw Deck focus ring and coloured hint glyphs.
+// Modified 2026-11-02 (phase 4b): nearest(from:toward:allowed:) can keep the search to some controls (Settings' sections).
 
 import SwiftUI
 import GameController
@@ -177,10 +178,11 @@ struct BCDHint: Identifiable, Equatable {
 
     /// The closest control whose centre lies in the 45° cone of the direction, distance
     /// weighted so that staying in the same row or column wins.
-    func nearest(from rect: CGRect, toward direction: BCDMove) -> String? {
+    /// MCD: `allowed` (nil: every control) keeps the search to some of them (Settings: a section's own).
+    func nearest(from rect: CGRect, toward direction: BCDMove, allowed: ((String) -> Bool)? = nil) -> String? {
         let origin = CGPoint(x: rect.midX, y: rect.midY)
         var best: (String, CGFloat)?
-        for (id, frame) in frames where frame != rect && reachable(id) {
+        for (id, frame) in frames where frame != rect && reachable(id) && (allowed?(id) ?? true) {
             let dx = frame.midX - origin.x, dy = frame.midY - origin.y
             let (along, across): (CGFloat, CGFloat)
             switch direction {

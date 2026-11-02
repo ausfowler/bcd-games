@@ -7,6 +7,8 @@
 // Modified 2026-11-02: the flipped card's Cloud button (MCD Cloud, layout A) and what A does on it.
 // Modified 2026-11-02 (phase 3): Cloud plays the game: MCD's cloud screen (MCDCloudPlay.swift) over the shell.
 // Modified 2026-11-02 (phase 4): the iPhone Duo's top bar: JIT in the menu, the title on one line, the camera kept clear.
+// Modified 2026-11-02 (phase 4b): even sides inside the safe area (the closed Duo sat off centre one way round); the camera's
+// room only the camera's way round; the top bar never wider than the screen.
 
 import SwiftUI
 import UIKit
@@ -132,8 +134,8 @@ struct BCDFrontEnd: View {
         case .home:
             MCDHomeView(model: carousel, play: { playOrInstall($0) }, cloud: { cloudPressed($0) }, openPage: { openedGame = $0 })
                 // Centred on the whole screen: in landscape the Duo keeps its status icons in a strip down one side
-                // (the safe area), which pushed the carousel off centre. The bars still keep clear of the strip.
-                .ignoresSafeArea(.container, edges: .horizontal)
+                // (the safe area), which pushed the carousel off centre. Even sides, inside the safe area (MCDEvenSides).
+                .modifier(MCDEvenSides())
                 .bcdGamePage($openedGame, from: "Home")
                 .onAppear { cardMenu.openPage = { openedGame = $0 } }
         // MCD: the Library and Downloads are centred on the screen, with equal room at both sides (the hint bar's centre).
@@ -272,7 +274,12 @@ struct BCDFrontEnd: View {
             if MCDDuo.isThisPhone {
                 // MCD (phase 4): on the iPhone Duo always the compact bar, JIT's state in the menu (Status), as its open screen
                 // already had it. Closed and on its side one way, the full bar used to fit, and ran under the camera.
-                topBarRow(compact: true)
+                // MCD (phase 4b): never wider than the screen (a bar too wide laid the whole shell out off centre): when the
+                // row does not fit, LB and RB give way.
+                ViewThatFits(in: .horizontal) {
+                    topBarRow(compact: true)
+                    topBarRow(compact: true, shoulders: false)
+                }
             } else {
                 ViewThatFits(in: .horizontal) {
                     topBarRow(compact: false)
@@ -284,11 +291,11 @@ struct BCDFrontEnd: View {
         .padding(.horizontal, layout.gutter).padding(.top, layout == .pad ? 12 : 8).padding(.bottom, 6)
     }
 
-    private func topBarRow(compact: Bool) -> some View {
+    private func topBarRow(compact: Bool, shoulders: Bool = true) -> some View {
         HStack(spacing: compact ? 8 : 10) {
-            if focus.controllerActive { shoulder("LB") }
+            if shoulders && focus.controllerActive { shoulder("LB") }
             MCDTabPill(tab: $tab, downloads: store.downloads.count, compact: compact).fixedSize()
-            if focus.controllerActive { shoulder("RB") }
+            if shoulders && focus.controllerActive { shoulder("RB") }
             if tab == .library && !compact {
                 // The label gives way when the bar is short of room, never the tabs or the buttons.
                 ViewThatFits(in: .horizontal) {
@@ -487,7 +494,7 @@ struct BCDFrontEnd: View {
     }
 
     /// Claw Deck's footer: the controller and its battery, then the buttons' hints, in one glass capsule centred on
-    /// the whole screen (the Duo's status strip down one side no longer pulls it off centre).
+    /// the whole screen (the Duo's status strip down one side no longer pulls it off centre: MCDEvenSides).
     private var hintBar: some View {
         HStack(spacing: 24) {
             if let name = store.system.controllerName {
@@ -511,7 +518,7 @@ struct BCDFrontEnd: View {
         .opacity(focus.layerOpen ? 0 : 1)
         .frame(maxWidth: .infinity).frame(height: 48)
         .padding(.bottom, 4)
-        .ignoresSafeArea(.container, edges: .horizontal)
+        .modifier(MCDEvenSides())
     }
 }
 
@@ -646,61 +653,96 @@ struct MCDCameraClearance: ViewModifier {
     }
 }
 
-/// MCD: content centred on the whole screen with even sides. In landscape the Duo keeps its status icons in a strip down one
-/// side (the safe area), and content laid out beside it sat off centre. This takes the content out to both screen edges and
-/// pads each side by the larger of the two insets, so it clears the strip and has the same room on the left as on the right.
+/// MCD: content centred on the whole screen with even sides. In landscape the Duo's closed screen keeps a strip clear
+/// down one side only (the safe area), and content laid out beside it sat off centre. This pads, inside the safe area,
+/// the side without the strip by the strip's width, so the content clears the strip and has the same room on the left as
+/// on the right: centred on the screen.
 ///
-/// The insets come from MCDSafeSides, measured by one full-screen probe that nothing here can resize. (An earlier version
-/// measured them from the padded view itself and set the padding from that during layout; on rotation the two fed each other
-/// and the app froze half way through the turn.)
+/// Fix (2026-11-02, Austin's screenshot): this used to take the content out to both screen edges (ignoresSafeArea) and pad
+/// both sides by the larger inset. On the closed screen turned with the strip on the left, the content came out shifted
+/// right by the strip's width instead (the card and the hint bar 41 pt right of centre). Padding inside the safe area
+/// needs nothing from ignoresSafeArea: the leading side gets (larger - left), the trailing side (larger - right).
+///
+/// The insets come from MCDSafeSides, measured on the window by a full-screen probe that nothing here can resize. (An
+/// earlier version measured them from the padded view itself and set the padding from that during layout; on rotation the
+/// two fed each other and the app froze half way through the turn.)
 struct MCDEvenSides: ViewModifier {
     @ObservedObject private var sides = MCDSafeSides.shared
 
     func body(content: Content) -> some View {
         content
-            .padding(.horizontal, sides.even)
-            .ignoresSafeArea(.container, edges: .horizontal)
+            .padding(.leading, sides.leadingPad)
+            .padding(.trailing, sides.trailingPad)
     }
 }
 
-/// The window's side insets, as the larger of left and right. Set from outside any layout pass (the next turn of the main
-/// queue), and only when it really changes.
+/// The window's side insets. Set from outside any layout pass (the next turn of the main queue), and only when they
+/// really change.
 @MainActor final class MCDSafeSides: ObservableObject {
     static let shared = MCDSafeSides()
-    @Published private(set) var even: CGFloat = 0
+    /// The window's left and right safe-area insets.
+    @Published private(set) var left: CGFloat = 0
+    @Published private(set) var right: CGFloat = 0
     /// MCD (phase 4): room the top bar leaves on its leading side for the iPhone Duo's camera (MCDCameraClearance).
     @Published private(set) var camera: CGFloat = 0
-    private var pending: CGFloat?
+    private var pending: (left: CGFloat, right: CGFloat, camera: CGFloat)?
+    private var logged = ""
+    /// MCD's log, set by the engine side (MCDCloudPlayLive.start): the preview app has no LogStore.
+    static var log: ((String) -> Void)?
 
-    /// The iPhone Duo closed and on its side with the camera at the top left reports no inset for the camera, so the
-    /// bar ran under it (Austin's screenshot, 2026-11-02: the camera reaches 9.75% of the width in). On the closed
-    /// screen on its side, either way round (which way puts the camera there is not assumed: the other way the pill
-    /// only sits a little further in), this much of the width is kept clear at the bar's leading side.
-    static func cameraRoom(foldable: Bool, size: CGSize) -> CGFloat {
+    /// MCDEvenSides' padding, inside the safe area: each side up to the larger inset.
+    var leadingPad: CGFloat { Self.pads(left: left, right: right).leading }
+    var trailingPad: CGFloat { Self.pads(left: left, right: right).trailing }
+
+    /// (leading, trailing) for a left-to-right layout (MCD's only one): the side without the strip gets its width.
+    static func pads(left: CGFloat, right: CGFloat) -> (leading: CGFloat, trailing: CGFloat) {
+        let larger = max(left, right)
+        return (leading: max(0, larger - left), trailing: max(0, larger - right))
+    }
+
+    /// The iPhone Duo closed and on its side with the camera at the top left reports no inset at all, so the bar ran
+    /// under the camera (Austin's screenshot, 2026-11-02: the camera reaches 9.75% of the width in). Turned the other
+    /// way, the camera is at the bottom right, away from the bar, and the screen keeps a strip clear down its left side
+    /// (Austin's screenshot, 2026-11-02: everything sat a strip's width right of centre). So the room is kept only on the
+    /// closed screen on its side with no side inset: the camera's way round.
+    static func cameraRoom(foldable: Bool, size: CGSize, left: CGFloat, right: CGFloat) -> CGFloat {
         guard foldable, size.width > size.height,
-              size.width < 940 else { return 0 }   // the open screen is 951 pt wide (the foldable log); narrower is the closed one
+              size.width < 940,               // the open screen is 951 pt wide (the foldable log); narrower is the closed one
+              left < 1, right < 1 else { return 0 }
         return (size.width * 0.10).rounded()
     }
 
     func report(view: UIView) {
-        report(view.safeAreaInsets)
-        let value = Self.cameraRoom(foldable: MCDDuo.isThisPhone, size: view.bounds.size)
-        guard value != camera else { return }
-        DispatchQueue.main.async { [weak self] in
-            guard let self, value != self.camera else { return }
-            self.camera = value
+        // The window's insets, not the probe's own: they do not depend on where the probe was placed.
+        let insets = view.window?.safeAreaInsets ?? view.safeAreaInsets
+        let size = view.window?.bounds.size ?? view.bounds.size
+        guard insets.left.isFinite, insets.right.isFinite, insets.left >= 0, insets.right >= 0,
+              insets.left < 400, insets.right < 400 else { return }
+        let camera = Self.cameraRoom(foldable: MCDDuo.isThisPhone, size: size, left: insets.left, right: insets.right)
+        if MCDDuo.isThisPhone {
+            // Which way round the screen is, with its edges: one line whenever they change (to check the camera's side).
+            let turn: String
+            switch view.window?.windowScene?.interfaceOrientation {
+            case .landscapeLeft?: turn = "landscapeLeft"
+            case .landscapeRight?: turn = "landscapeRight"
+            case .portrait?: turn = "portrait"
+            case .portraitUpsideDown?: turn = "portraitUpsideDown"
+            default: turn = "unknown"
+            }
+            let line = "[shell] \(Int(size.width))x\(Int(size.height)) \(turn): insets left \(Int(insets.left)) right \(Int(insets.right)) top \(Int(insets.top)) bottom \(Int(insets.bottom)), camera room \(Int(camera))"
+            if line != logged, let log = Self.log { logged = line; log(line) }
         }
-    }
-
-    func report(_ insets: UIEdgeInsets) {
-        let value = max(insets.left, insets.right)
-        guard value.isFinite, value >= 0, value < 400 else { return }
-        guard abs(value - (pending ?? even)) > 0.5 else { return }
-        pending = value
+        let next = (left: insets.left, right: insets.right, camera: camera)
+        let current = pending ?? (left: left, right: right, camera: self.camera)
+        guard abs(next.left - current.left) > 0.5 || abs(next.right - current.right) > 0.5 || next.camera != current.camera
+        else { return }
+        pending = next
         DispatchQueue.main.async { [weak self] in
             guard let self, let value = self.pending else { return }
             self.pending = nil
-            if abs(value - self.even) > 0.5 { self.even = value }
+            if abs(value.left - self.left) > 0.5 { self.left = value.left }
+            if abs(value.right - self.right) > 0.5 { self.right = value.right }
+            if value.camera != self.camera { self.camera = value.camera }
         }
     }
 }

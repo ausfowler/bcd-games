@@ -37,6 +37,8 @@ import UIKit
     /// NOW starts here: the service starts when someone signed in launches the app or presses Cloud.
     func start() {
         guard watching == nil else { return }
+        // The shell's screen edges and turn on the iPhone Duo, in MCD's log (MCDSafeSides).
+        MCDSafeSides.log = { LogStore.shared.log($0) }
         let service = MCDCloudService.shared
         let play = MCDCloudPlay.shared
         play.start = { game in
