@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Mobile Claw Deck (MCD), a fork of BCD (https://github.com/thebcd69/bcd-games) by ausfowler.
 // Added 2026-10-31. Includes work from BCD by thebcd69.
+// Modified 2026-11-02 (phase 4c): cards sized from the whole screen's width again (even sides had shrunk them); the
+// Y menu's Carousel size (MCDCarouselSize).
 //
 // MCD's Home: Claw Deck 3.0's carousel (ausfowler/rusty-clawdeck, src/ui.rs draw_carousel,
 // src/motion.rs, docs/NAVIGATION.md) on BCD's store. The numbers are Claw Deck's:
@@ -114,6 +116,10 @@ struct MCDHomeView: View {
     /// Each card's Cloud button (MCDCloudCards): redrawn when the catalog or the account changes.
     @ObservedObject private var cloudCards = MCDCloudCards.shared
     @State private var dragged: CGFloat = 0
+    /// The window's side insets: the cards are sized from the whole screen's width (MCDEvenSides pads this view).
+    @ObservedObject private var sides = MCDSafeSides.shared
+    /// The Y menu's Carousel size (MCDCarouselSize).
+    @AppStorage(MCDCarouselSize.key) private var sizeChoice = MCDCarouselSize.standard
 
     var body: some View {
         let games = MCDCarouselModel.order(store.games)
@@ -153,10 +159,17 @@ struct MCDHomeView: View {
         // Claw Deck: card scale from width, bounded by height (Settings › Display › Carousel size is 100%).
         // Claw Deck sizes cards min(width * 0.273, height * 0.46) / 300 for a large handheld screen; on a phone that
         // made them small, so MCD uses more of the screen: 36% of the width in landscape (55% upright), 60% of the height.
-        let portrait = size.height > size.width
-        let sc = max(min(size.width * (portrait ? 0.55 : 0.36) / 300, size.height * 0.60 / 300), 0.05)
+        // MCD (phase 4c): the width is the whole screen's, as before even sides (MCDEvenSides pads this view by the
+        // strip's width on the side without it, which made the cards smaller on the closed Duo upright). The view's
+        // width plus the strip's width on each side is the screen's: the padding and the insets add up to that.
+        let screenWidth = size.width + 2 * sides.evenInset
+        let portrait = size.height > screenWidth
+        // Carousel size (MCDCarouselSize): Standard is the size above exactly; never taller than 66% of the height
+        // (Standard's own bound is 60%), so the title under the selected card keeps its room.
+        let standard = min(screenWidth * (portrait ? 0.55 : 0.36) / 300, size.height * 0.60 / 300)
+        let sc = max(min(standard * MCDCarouselSize.factor(sizeChoice), size.height * 0.66 / 300), 0.05)
         // The flipped card is 540 x 300 units; it never outgrows the screen (the narrow folded Duo, upright).
-        let backScale = max(min(sc * 1.05, (size.width - 32) / 540, (size.height - 24) / 300), 0.05)
+        let backScale = max(min(sc * 1.05, (screenWidth - 32) / 540, (size.height - 24) / 300), 0.05)
         // The finger's travel in cards (0 when the scale is not usable).
         let drag = MCDMath.finite(Double(dragged / (180 * sc)))
         let center = CGPoint(x: size.width / 2, y: size.height * 0.45)
@@ -467,4 +480,39 @@ enum MCDFormat {
 extension BCDStoreFront {
     /// The chip's word for a store, from BCD's own name for it ("STEAM", "EPIC GAMES").
     var mcdLabel: String { title.uppercased() }
+}
+
+// MARK: - Carousel size
+
+/// The Y menu's Carousel size: how big Home's cards are. Standard is the carousel's own size (Claw Deck's rule, with MCD's
+/// phone numbers); the others scale it.
+enum MCDCarouselSize {
+    static let key = "mcd.carousel.size"
+    static let standard = "standard"
+
+    struct Choice {
+        let value: String
+        let title: String
+        let factor: Double
+    }
+
+    static let choices: [Choice] = [
+        Choice(value: "smaller", title: "Smaller", factor: 0.85),
+        Choice(value: standard, title: "Standard", factor: 1.0),
+        Choice(value: "larger", title: "Larger", factor: 1.12),
+    ]
+
+    /// A stored value's factor (Standard's for anything unknown).
+    static func factor(_ stored: String) -> CGFloat {
+        CGFloat(choices.first { $0.value == stored }?.factor ?? 1.0)
+    }
+
+    /// A stored value as one of the choices (Standard for anything else).
+    static func normalized(_ stored: String) -> String {
+        choices.contains { $0.value == stored } ? stored : standard
+    }
+
+    static func title(_ stored: String) -> String {
+        choices.first { $0.value == stored }?.title ?? "Standard"
+    }
 }

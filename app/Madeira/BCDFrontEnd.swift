@@ -9,6 +9,7 @@
 // Modified 2026-11-02 (phase 4): the iPhone Duo's top bar: JIT in the menu, the title on one line, the camera kept clear.
 // Modified 2026-11-02 (phase 4b): even sides inside the safe area (the closed Duo sat off centre one way round); the camera's
 // room only the camera's way round; the top bar never wider than the screen.
+// Modified 2026-11-02 (phase 4c): the Y menu's Carousel size on Home.
 
 import SwiftUI
 import UIKit
@@ -33,6 +34,8 @@ struct BCDFrontEnd: View {
     @StateObject private var carousel = MCDCarouselModel()
     /// MCD: the game whose page the flipped card's Settings opened.
     @State private var openedGame: BCDGame?
+    /// MCD (phase 4c): the Y menu's Carousel size (MCDHomeView reads the same key).
+    @AppStorage(MCDCarouselSize.key) private var carouselSize = MCDCarouselSize.standard
     @Environment(\.horizontalSizeClass) private var horizontal
     @Environment(\.verticalSizeClass) private var vertical
 
@@ -231,6 +234,13 @@ struct BCDFrontEnd: View {
             items.append(BCDMenuItem(id: "mcd.home", title: "Home", symbol: "house.fill") { withAnimation(MCDMotion.pop) { tab = .home } })
         }
         items.append(BCDMenuItem(id: "mcd.library", title: "Library", symbol: "square.grid.2x2.fill") { withAnimation(MCDMotion.pop) { tab = .library } })
+        if tab == .home {
+            // MCD (phase 4c): how big Home's cards are; the choices open in the same menu, the carousel showing behind it.
+            items.append(BCDMenuItem(id: "mcd.carousel", title: "Carousel size", symbol: "rectangle.stack.fill",
+                                     detail: MCDCarouselSize.title(carouselSize)) {
+                DispatchQueue.main.async { showCarouselSizes() }
+            })
+        }
         if tab == .library {
             items.append(BCDMenuItem(id: "mcd.search", title: "Search the library", symbol: "magnifyingglass") { librarySearch += 1 })
         }
@@ -245,6 +255,18 @@ struct BCDFrontEnd: View {
         items.append(BCDMenuItem(id: "mcd.storage", title: "Storage", symbol: "internaldrive.fill") { openSettings(.storage) })
         items.append(BCDMenuItem(id: "mcd.refresh", title: "Refresh the library", symbol: "arrow.clockwise") { store.actions?.refreshLibrary() })
         cardMenu.show(BCDMenuContent(title: "Mobile Claw Deck", items: items))
+    }
+
+    /// The Carousel size choices (the Y menu's Carousel size), the one in force checked.
+    private func showCarouselSizes() {
+        guard !cardMenu.isOpen else { return }
+        let items = MCDCarouselSize.choices.map { choice in
+            BCDMenuItem(id: "mcd.carousel." + choice.value, title: choice.title, symbol: "rectangle.stack",
+                        checked: choice.value == MCDCarouselSize.normalized(carouselSize)) {
+                withAnimation(MCDMotion.glide) { carouselSize = choice.value }
+            }
+        }
+        cardMenu.show(BCDMenuContent(title: "Carousel size", items: items))
     }
 
     private func openSettings() {
@@ -689,6 +711,9 @@ struct MCDEvenSides: ViewModifier {
     private var logged = ""
     /// MCD's log, set by the engine side (MCDCloudPlayLive.start): the preview app has no LogStore.
     static var log: ((String) -> Void)?
+
+    /// The larger side inset: the room MCDEvenSides leaves on each side of the screen.
+    var evenInset: CGFloat { max(left, right) }
 
     /// MCDEvenSides' padding, inside the safe area: each side up to the larger inset.
     var leadingPad: CGFloat { Self.pads(left: left, right: right).leading }
