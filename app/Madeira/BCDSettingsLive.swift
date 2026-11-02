@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
+// Modified 2026-11-02 (ausfowler/bcd-games, Mobile Claw Deck): Settings › Cloud's page.
 
 import SwiftUI
 import UIKit
@@ -27,6 +28,8 @@ extension BCDSettingsBackends {
                             // draws its whole page; B asks its own pages first (BCDSettingsSectionBack).
                             custom: [
                                 .accounts: { AnyView(BCDAccountsLiveSection(backHook: BCDSettingsSectionBack.shared.hook)) },
+                                // MCD: GeForce NOW's sign-in (MCDCloudLive.swift).
+                                .cloud: { AnyView(MCDCloudLiveSection(backHook: BCDSettingsSectionBack.shared.hook)) },
                                 .jit: { AnyView(BCDJITLiveSection(enableJIT: { BCDLiveStore.shared.enableJIT() },
                                                                   backHook: BCDSettingsSectionBack.shared.hook)) },
                                 .dock: { AnyView(BCDDockLiveSection(startDock: { BCDLiveStore.shared.startDock($0, $1) },
@@ -1137,6 +1140,9 @@ struct BCDLiveSwitch {
         "THIRD-PARTY-NOTICES.md": "Third-party components",
         "DXMT-MIT.txt": "DXMT · MIT license", "MIT-DXMT.txt": "DXMT · MIT license",
         "FEX-MIT.txt": "FEX-Emu · MIT license", "MIT-FEX.txt": "FEX-Emu · MIT license",
+        // MCD Cloud (app/MCDCloud): OpenNOW's engine and the libraries it links.
+        "MIT-OpenNOW.txt": "OpenNOW · MIT license", "Apache-2.0-OpenSSL.txt": "OpenSSL · Apache License 2.0",
+        "BSD-3-usrsctp.txt": "usrsctp · BSD 3-clause license", "BSD-3-WebRTC.txt": "WebRTC · BSD 3-clause license",
         "LGPL-2.1.txt": "GNU Lesser General Public License 2.1",
         "LGPL-3.0.txt": "GNU Lesser General Public License 3.0",
         "GPL-2.0.txt": "GNU General Public License 2.0 · the MIDI sound bank",

@@ -4489,6 +4489,15 @@ jobs:
           echo "::notice::$(xcrun swift --version 2>&1 | grep -m1 'Swift version')"
           python3 tools/stikjit-interface-compat.py app/Frameworks/StikJIT.xcframework
 
+      # MCD Cloud (app/MCDCloud, OpenNOW's engine): its static OpenSSL and usrsctp must share no global
+      # name with any other library the app links, or the link either fails deep in the log or binds one
+      # library's calls to the other's code (GnuTLS and OpenSSL did; tools/mcd-cloud-vendor.py renames
+      # OpenSSL's copies). Every archive exists by now; this proves it on them, before the archive starts.
+      - name: Guard MCD Cloud's libraries against duplicate symbols
+        if: hashFiles('app/MCDCloud/Package.swift') != ''
+        shell: bash
+        run: python3 tools/mcd-cloud-symbol-guard.py --ci "$(xcrun -f nm)"
+
       - name: Archive (unsigned)
         shell: bash
         run: |

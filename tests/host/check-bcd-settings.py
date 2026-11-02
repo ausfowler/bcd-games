@@ -179,9 +179,13 @@ func check(_ cond: Bool, _ what: String) {
 typealias N = BCDSettingsNavigator
 let all = BCDSettingsSection.allCases
 let list = BCDSettingsID.list
-check(all.count == 16 && all.last == .about && all[all.count - 2] == .updates && all.contains(.developer)
+check(all.count == 17 && all.last == .about && all[all.count - 2] == .updates && all.contains(.developer)
       && all.firstIndex(of: .gecko) == all.firstIndex(of: .vcruntime)! + 1,
-      "sixteen sections (Developer among them, the HTML engine for installers right after Visual C++), Updates then About last")
+      "seventeen sections (Developer among them, the HTML engine for installers right after Visual C++), Updates then About last")
+// MCD (ausfowler/bcd-games, 2026-11-02): Cloud, GeForce NOW's sign-in, right after Accounts; its page is drawn elsewhere.
+check(all.firstIndex(of: .cloud) == all.firstIndex(of: .accounts)! + 1 && BCDSettingsSection.cloud.title == "Cloud"
+      && BCDSettingsSection(name: "cloud") == .cloud && BCDSettingsSection.cloud.placeholder,
+      "Cloud is a section of its own, right after Accounts, drawn by its own page")
 check(all.firstIndex(of: .feedback) == all.firstIndex(of: .logs)! + 1 && BCDSettingsSection.feedback.title == "Feedback"
       && BCDSettingsSection(name: "feedback") == .feedback && !BCDSettingsSection.feedback.placeholder,
       "Feedback is a section of its own, right after Logs")
@@ -454,9 +458,9 @@ check('Text("Classic settings")' not in root and "classicRow" not in root,
       "no Classic settings row in BCD's Settings (2026-10-19: nothing classic on screen)")
 placeholder = block(views["BCDSettingsSections.swift"], "struct BCDSettingsPlaceholder: View")
 check("openClassic" not in placeholder and "classic" not in code(placeholder).lower()
-      and "var placeholder: Bool { [.accounts, .jit, .dock].contains(self) }" in views["BCDSettingsCore.swift"]
-      and "case .accounts, .jit, .dock: BCDSettingsPlaceholder(section: section)" in root,
-      "only Accounts, JIT and BCD Dock are placeholders (the preview's; the app wires them in), and they open nothing classic")
+      and "var placeholder: Bool { [.accounts, .cloud, .jit, .dock].contains(self) }" in views["BCDSettingsCore.swift"]
+      and "case .accounts, .cloud, .jit, .dock: BCDSettingsPlaceholder(section: section)" in root,
+      "only Accounts, Cloud (MCD), JIT and BCD Dock are placeholders (the preview's; the app wires them in), and they open nothing classic")
 vc_view = block(views["BCDSettingsSections.swift"], "struct BCDVCRuntimeSettings<Backend: BCDVCRuntimeBackend>: View")
 check('URL(string: "https://visualstudio.microsoft.com/license-terms/vs2022-cruntime/")' in vc_view
       and '"Accept and download"' in vc_view and "accept Microsoft's license terms" in vc_view

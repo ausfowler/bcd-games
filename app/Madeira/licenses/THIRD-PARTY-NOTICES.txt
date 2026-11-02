@@ -115,6 +115,12 @@ Downloaded on the device when the user asks, never part of BCD's packages:
   in that window (which names the vendor's terms), is checked against a pinned SHA-256 and size and is deleted after installing.
   They are never part of BCD's packages; the vendors' own licences apply to them.
 
+Mobile Claw Deck's Cloud (GeForce NOW; app/MCDCloud in the fork ausfowler/bcd-games):
+- OpenNOW (MIT), its iOS GeForce NOW client, with OpenSSL (Apache-2.0) and
+  usrsctp (BSD-3-Clause) linked statically and WebRTC.framework (BSD-3-Clause)
+  embedded. Their licence texts: legal/LICENSES/MIT-OpenNOW.txt,
+  Apache-2.0-OpenSSL.txt, BSD-3-usrsctp.txt and BSD-3-WebRTC.txt.
+
 Dynamically loaded at runtime:
 - Apple Metal Shader Converter dynamic library: Apple proprietary, under the
   agreement in d3d12/METAL-SHADER-CONVERTER-AGREEMENT.txt (section 2.B:

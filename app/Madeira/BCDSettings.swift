@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
+// Modified 2026-11-02 (ausfowler/bcd-games, Mobile Claw Deck): Cloud is one of the pages drawn elsewhere (MCDCloudLive.swift).
 
 import SwiftUI
 import UIKit
@@ -780,7 +781,7 @@ struct BCDSettingsDetail: View {
 
     @ViewBuilder private var content: some View {
         switch section {
-        case .accounts, .jit, .dock: BCDSettingsPlaceholder(section: section)
+        case .accounts, .cloud, .jit, .dock: BCDSettingsPlaceholder(section: section)
         case .vcruntime: Self.vcRuntime(model.backends.vcRuntime, model.backends.vcRuntime32)
         case .gecko: Self.gecko(model.backends.gecko)
         case .memory: Self.memory(model.backends.memory)

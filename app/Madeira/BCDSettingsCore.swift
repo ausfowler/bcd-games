@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
+// Modified 2026-11-02 (ausfowler/bcd-games, Mobile Claw Deck): Cloud (GeForce NOW sign-in), right after Accounts.
 
 import Foundation
 
@@ -11,13 +12,14 @@ import Foundation
 
 /// Settings' sections, in the order the list shows them.
 enum BCDSettingsSection: String, CaseIterable, Identifiable {
-    case accounts, jit, dock, memory, graphics, controls, storage, dotnet, vcruntime, gecko, logs, feedback, all, developer, updates, about
+    case accounts, cloud, jit, dock, memory, graphics, controls, storage, dotnet, vcruntime, gecko, logs, feedback, all, developer, updates, about
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .accounts: return "Accounts"
+        case .cloud: return "Cloud"
         case .jit: return "JIT"
         case .dock: return "BCD Dock"
         case .memory: return "Memory & performance"
@@ -40,6 +42,7 @@ enum BCDSettingsSection: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .accounts: return "Steam, Epic Games and GOG"
+        case .cloud: return "GeForce NOW sign-in"
         case .jit: return "How BCD gets JIT on this device"
         case .dock: return "Valve's client for your Steam games"
         case .memory: return "Limits, the swap file, sync and eco mode"
@@ -61,6 +64,7 @@ enum BCDSettingsSection: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .accounts: return "person.crop.circle"
+        case .cloud: return "cloud.fill"
         case .jit: return "bolt.fill"
         case .dock: return "shippingbox.fill"
         case .memory: return "memorychip"
@@ -81,7 +85,7 @@ enum BCDSettingsSection: String, CaseIterable, Identifiable {
 
     /// Sections another part of the interface builds. Until one is wired in
     /// (BCDSettingsBackends.custom), its page says what it will hold.
-    var placeholder: Bool { [.accounts, .jit, .dock].contains(self) }
+    var placeholder: Bool { [.accounts, .cloud, .jit, .dock].contains(self) }
 
     /// The preview app's `-BCDSection <name>`: the raw name or the title, any case.
     init?(name: String) {

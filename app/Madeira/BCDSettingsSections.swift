@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
+// Modified 2026-11-02 (ausfowler/bcd-games, Mobile Claw Deck): the preview's Cloud placeholder rows.
 
 import SwiftUI
 import UIKit
@@ -1386,6 +1387,8 @@ struct BCDSettingsPlaceholder: View {
             return [("Steam", "Sign in, switch account or sign out. Your Steam library and downloads use this account."),
                     ("Epic Games", "Sign in to list your Epic games and install them."),
                     ("GOG", "Sign in to list your GOG games and install them.")]
+        case .cloud:
+            return [("GeForce NOW", "Sign in with NVIDIA, or with a code on another device; your membership; sign out.")]
         case .jit:
             return [("How JIT turns on", "Built-in pairing, a pairing file made on a computer, or StikDebug."),
                     ("Pairing", "Pair this device again, or import a pairing file."),
