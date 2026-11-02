@@ -294,9 +294,9 @@ enum JITShortcutFile {
             URLQueryItem(name: "name", value: Self.name),
             URLQueryItem(name: "input", value: "text"),
             URLQueryItem(name: "text", value: input),
-            URLQueryItem(name: "x-success", value: "bcd://jit-network/success"),
-            URLQueryItem(name: "x-error", value: "bcd://jit-network/error"),
-            URLQueryItem(name: "x-cancel", value: "bcd://jit-network/cancel")
+            URLQueryItem(name: "x-success", value: "mcd://jit-network/success"),
+            URLQueryItem(name: "x-error", value: "mcd://jit-network/error"),
+            URLQueryItem(name: "x-cancel", value: "mcd://jit-network/cancel")
         ]
         guard let url = c.url else { completion(.failed("the Shortcuts link could not be built")); return }
         LogStore.shared.log("[jit-shortcut] run input=\(input)")
@@ -309,10 +309,10 @@ enum JITShortcutFile {
         }
     }
 
-    /// madeira://jit-network/{success|error|cancel}, from Shortcuts' x-callback-url.
+    /// mcd://jit-network/{success|error|cancel}, from Shortcuts' x-callback-url (bcd:// and madeira:// as before).
     @discardableResult
     func handle(_ url: URL) -> Bool {
-        guard url.scheme == "bcd" || url.scheme == "madeira", url.host == "jit-network" else { return false }
+        guard ["mcd", "bcd", "madeira"].contains(url.scheme ?? ""), url.host == "jit-network" else { return false }
         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let value = { (name: String) in query.first { $0.name == name }?.value ?? "" }
         switch url.path {

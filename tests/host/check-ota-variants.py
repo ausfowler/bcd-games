@@ -52,15 +52,15 @@ class Links(HTMLParser):
 with tempfile.TemporaryDirectory(prefix="madeira-ota-contracts-") as directory:
     tmp = Path(directory)
     source = tmp / "archive" / "Madeira.app"
-    app_info = dict(CFBundleIdentifier="com.thebcd69.bcd", CFBundleDisplayName="BCD",
+    app_info = dict(CFBundleIdentifier="com.ausfowler.mcd", CFBundleDisplayName="MCD",
                     CFBundleName="Madeira", CFBundleExecutable="Madeira", CFBundleVersion="413",
                     CFBundleShortVersionString="0.1.413", MadeiraNativeABI="unchanged-abi",
-                    BGTaskSchedulerPermittedIdentifiers=["com.thebcd69.bcd.download.*"],
+                    BGTaskSchedulerPermittedIdentifiers=["com.ausfowler.mcd.download.*"],
                     CFBundleURLTypes=[dict(CFBundleURLSchemes=["madeira"])])
     plist(source / "Info.plist", app_info)
     (source / "Madeira").write_bytes(b"unchanged native executable\x00")
     extension = source / "Extensions" / "MadeiraMemoryHost.appex"
-    plist(extension / "Info.plist", dict(CFBundleIdentifier="com.thebcd69.bcd.MemoryHost",
+    plist(extension / "Info.plist", dict(CFBundleIdentifier="com.ausfowler.mcd.MemoryHost",
                                         CFBundleExecutable="MadeiraMemoryHost"))
     (extension / "MadeiraMemoryHost").write_bytes(b"unchanged extension executable\x00")
     framework = source / "Frameworks" / "Renderer.framework"
@@ -75,12 +75,12 @@ with tempfile.TemporaryDirectory(prefix="madeira-ota-contracts-") as directory:
     assert snapshot(primary) == before == snapshot(source)
     changed = {name for name, value in snapshot(secondary).items() if value != before[name]}
     assert changed == {"Info.plist", "Extensions/MadeiraMemoryHost.appex/Info.plist"}
-    expected = dict(app_info, CFBundleIdentifier="com.thebcd69.bcd2",
-                    CFBundleDisplayName="BCD 2", CFBundleName="Madeira2",
-                    BGTaskSchedulerPermittedIdentifiers=["com.thebcd69.bcd2.download.*"])
+    expected = dict(app_info, CFBundleIdentifier="com.ausfowler.mcd2",
+                    CFBundleDisplayName="MCD 2", CFBundleName="Madeira2",
+                    BGTaskSchedulerPermittedIdentifiers=["com.ausfowler.mcd2.download.*"])
     assert plist(secondary / "Info.plist") == expected
     assert plist(secondary / "Extensions/MadeiraMemoryHost.appex/Info.plist")["CFBundleIdentifier"] == \
-        "com.thebcd69.bcd2.MemoryHost"
+        "com.ausfowler.mcd2.MemoryHost"
     print("PASS: primary app bytes remain intact; secondary changes identity metadata only, including MemoryHost; binaries and framework symlinks match")
 
     # The unsigned IPA carries the entitlements a sideloader may grant, in an ad-hoc
@@ -247,7 +247,7 @@ elif tool == 'plistbuddy':
 elif tool == 'codesign':
     target = Path(args[-1]); identifier = None
     if target.is_dir() and (target/'Info.plist').exists(): identifier = plistlib.loads((target/'Info.plist').read_bytes())['CFBundleIdentifier']
-    if '--verify' not in args and identifier == 'com.thebcd69.bcd2' and os.environ.get('FAIL_SIGN'): sys.exit(7)
+    if '--verify' not in args and identifier == 'com.ausfowler.mcd2' and os.environ.get('FAIL_SIGN'): sys.exit(7)
     record(['verify' if '--verify' in args else 'sign', identifier])
 elif tool == 'ditto':
     if '-x' in args:

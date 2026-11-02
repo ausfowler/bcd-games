@@ -4457,14 +4457,18 @@ jobs:
       # sequence across Actions and the Mac), in the app (what Feather and
       # Settings > General show) and in the IPA's name, so an installed copy
       # can be matched to its build.
-      - name: Stamp version 0.1.${{ steps.bn.outputs.n }}
+      # Mobile Claw Deck (2026-11-02): the fork's builds are MCD 0.9 (the public 0.9 beta); the build number stays
+      # BCD's, so BCD's update check (BCDUpdateCheck: CFBundleVersion) compares like with like.
+      - name: Stamp version ${{ github.repository == 'ausfowler/bcd-games' && '0.9' || '0.1' }}.${{ steps.bn.outputs.n }}
         shell: bash
+        env:
+          MARKETING: ${{ github.repository == 'ausfowler/bcd-games' && '0.9' || '0.1' }}
         run: |
           /usr/libexec/PlistBuddy \
-            -c "Set :CFBundleShortVersionString 0.1.${{ steps.bn.outputs.n }}" \
+            -c "Set :CFBundleShortVersionString ${MARKETING}.${{ steps.bn.outputs.n }}" \
             -c "Set :CFBundleVersion ${{ steps.bn.outputs.n }}" \
             app/Madeira/Info.plist
-          echo "::notice::version 0.1.${{ steps.bn.outputs.n }} (build ${{ steps.bn.outputs.n }})"
+          echo "::notice::version ${MARKETING}.${{ steps.bn.outputs.n }} (build ${{ steps.bn.outputs.n }})"
           # madeira-bcd: which commit and run this IPA is; the D3D12 shader
           # cache identity (tools/build-madeira-d3d12-dll.sh) is only printed:
           # a new one means every D3D12 game converts its shaders once again.

@@ -191,6 +191,12 @@ check("let aspect = fixedShape(shape) ?? StreamSettingsResolver.aspectRatioOptio
       and 'stored != "auto", StreamSettingsResolver.aspectRatioOptions.contains(stored)' in fit_src
       and 'static let shapeKey = "mcd.cloud.shape"' in fit_src
       and "shape: UserDefaults.standard.string(forKey: MCDStreamFit.shapeKey))" in stream, "MCDStreamFit takes the shape Settings chose")
+# The public 0.9 beta: the notices of the code inside WebRTC.framework travel with the app (Settings › About).
+webrtc_bundled = (R / "app/Madeira/legal/LICENSES/BSD-3-WebRTC.txt").read_text()
+check(webrtc_bundled == vendor.webrtc_notices((R / "app/MCDCloud/Licenses/WebRTC-BSD-3-Clause.txt").read_text())
+      and all(f"--- {title} ---" in webrtc_bundled for title, _ in vendor.WEBRTC_NOTICES) and len(vendor.WEBRTC_NOTICES) == 23
+      and "Unresolved" not in (R / "THIRD-PARTY-NOTICES.md").read_text(),
+      "WebRTC.framework's third-party notices are bundled, as tools/mcd-cloud-vendor.py writes them")
 cloud_settings = (app / "MCDCloudSettings.swift").read_text()
 check('static let key = "mcd.cloud.shape"' in cloud_settings and "@AppStorage(MCDCloudShape.key)" in cloud_settings
       and all(f'Choice(value: "{a}"' in cloud_settings for a in ["16:9", "16:10", "4:3"]) and "Choice(value: auto" in cloud_settings,

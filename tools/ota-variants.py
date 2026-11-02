@@ -18,9 +18,10 @@ from urllib.parse import quote
 
 # The app is "BCD" (owner, 2026-10-18), with its own bundle IDs. The internal names stay
 # Madeira and Madeira2: they name the build outputs, the bucket objects and the pages.
-VARIANTS = (("Madeira", "com.thebcd69.bcd"),
-            ("Madeira2", "com.thebcd69.bcd2"))
-# Mobile Claw Deck (fork, 2026-10-31): the home-screen names; the bundle IDs stay BCD's.
+VARIANTS = (("Madeira", "com.ausfowler.mcd"),
+            ("Madeira2", "com.ausfowler.mcd2"))
+# Mobile Claw Deck (fork, 2026-10-31): the home-screen names. Its own bundle IDs (2026-11-02, the public 0.9 beta): an MCD
+# install never replaces a real BCD install, and MCD does not pass as the official BCD (LICENSE-BCD.md 4(c)).
 DISPLAY = {"Madeira": "MCD", "Madeira2": "MCD 2"}
 
 

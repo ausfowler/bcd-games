@@ -145,7 +145,7 @@ project = (root / "app/Madeira.xcodeproj/project.pbxproj").read_text()
 helper_source = (root / "app/MadeiraJITHelper/MadeiraJITHelper.swift").read_text()
 require(project.count('PRODUCT_BUNDLE_IDENTIFIER = "$(MADEIRA_BUNDLE_IDENTIFIER)";') == 2
         and project.count('PRODUCT_BUNDLE_IDENTIFIER = "$(MADEIRA_BUNDLE_IDENTIFIER).JITHelper";') == 2
-        and project.count("MADEIRA_BUNDLE_IDENTIFIER = com.thebcd69.bcd;") == 2   # the app is BCD (owner, 2026-10-18)
+        and project.count("MADEIRA_BUNDLE_IDENTIFIER = com.ausfowler.mcd;") == 2   # MCD's own ID (2026-11-02, the public 0.9 beta)
         and "AppExtensionPoint" not in helper_source,
         "one setting, MADEIRA_BUNDLE_IDENTIFIER, names the app and the helper")
 
@@ -162,9 +162,9 @@ require("if let jitProblem { jitConnectionActions(jitProblem, retry: enableJIT) 
 require('.alert(jitProblem == nil ? "Library" : "Enabling JIT Failed"' in front
         and "presenting(watching(shell))" in front,
         "the library's error alert is on the whole shell, shown over Settings as well")
-require('URL(string: "localdevvpn://enable?scheme=bcd")' in setup
+require('URL(string: "localdevvpn://enable?scheme=mcd")' in setup
         and "localdevvpn" in app_plist["LSApplicationQueriesSchemes"]
-        and any("bcd" in t.get("CFBundleURLSchemes", []) for t in app_plist.get("CFBundleURLTypes", [])),
+        and any("mcd" in t.get("CFBundleURLSchemes", []) for t in app_plist.get("CFBundleURLTypes", [])),
         "LocalDevVPN opens to connect and returns to Madeira's own URL scheme")
 
 # Play without JIT runs Enable JIT, then starts the game, once: only with the debugger

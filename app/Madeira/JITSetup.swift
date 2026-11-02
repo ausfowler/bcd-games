@@ -492,8 +492,9 @@ final class JITCoordinator: ObservableObject {
 /// connect when it is installed, otherwise its App Store page.
 enum LocalDevVPN {
     static let appStore = URL(string: "https://apps.apple.com/us/app/localdevvpn/id6755608044")!
-    /// `enable` connects the VPN; `scheme` has LocalDevVPN return to Madeira a second later.
-    static let connect = URL(string: "localdevvpn://enable?scheme=bcd")!
+    /// `enable` connects the VPN; `scheme` has LocalDevVPN return to Madeira a second later (MCD, 2026-11-02:
+    /// mcd://, MCD's own scheme, so it comes back to MCD even with a real BCD installed).
+    static let connect = URL(string: "localdevvpn://enable?scheme=mcd")!
 
     static var isInstalled: Bool { UIApplication.shared.canOpenURL(URL(string: "localdevvpn://")!) }
     static var actionTitle: String { isInstalled ? "Connect LocalDevVPN" : "Get LocalDevVPN" }

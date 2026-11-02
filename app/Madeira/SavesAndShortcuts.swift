@@ -29,14 +29,14 @@ final class ShortcutRouter: ObservableObject {
 
     static func link(for windowsPath: String) -> String {
         var c = URLComponents()
-        c.scheme = "bcd"
+        c.scheme = "mcd"   // MCD (2026-11-02): MCD's own scheme (Info.plist), never a real BCD's bcd://
         c.host = "play"
         c.queryItems = [URLQueryItem(name: "exe", value: windowsPath)]
-        return c.string ?? "bcd://play"
+        return c.string ?? "mcd://play"
     }
 
     func handle(_ url: URL) {
-        guard ["bcd", "madeira"].contains(url.scheme?.lowercased() ?? ""), url.host?.lowercased() == "play",
+        guard ["mcd", "bcd", "madeira"].contains(url.scheme?.lowercased() ?? ""), url.host?.lowercased() == "play",
               let exe = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "exe" })?.value, !exe.isEmpty else { return }
         LogStore.shared.log("[shortcut] asked to start \(exe)")

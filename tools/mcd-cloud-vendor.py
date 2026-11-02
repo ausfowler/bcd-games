@@ -114,6 +114,32 @@ OPENSSL_PREFIXED = [
 ]
 
 
+
+# The notices of the code inside WebRTC.framework (tools/mcd-cloud-notices/webrtc/README.md says what and from
+# where), in the order of that README's table, after WebRTC's own licence.
+WEBRTC_NOTICES = [
+    ("BoringSSL", "boringssl.txt"), ("BoringSSL, releases before its 2025 relicensing", "boringssl-before-2025.txt"),
+    ("fiat-crypto, inside BoringSSL", "boringssl-fiat.txt"), ("Opus", "opus.txt"), ("libvpx", "libvpx.txt"),
+    ("libvpx: patent grant", "libvpx-PATENTS.txt"), ("libaom", "libaom.txt"), ("libaom: AOM Patent License 1.0", "libaom-PATENTS.txt"),
+    ("dav1d", "dav1d.txt"), ("libyuv", "libyuv.txt"), ("libSRTP", "libsrtp.txt"), ("Abseil", "abseil-cpp.txt"),
+    ("Protocol Buffers", "protobuf.txt"), ("LLVM libc++", "libcxx.txt"), ("LLVM libc++abi", "libcxxabi.txt"),
+    ("PFFFT", "pffft.txt"), ("RNNoise", "rnnoise.txt"), ("CRC32C", "crc32c.txt"), ("Ooura FFT (in WebRTC)", "webrtc-ooura.txt"),
+    ("sigslot (in WebRTC)", "webrtc-sigslot.txt"), ("base64 (in WebRTC)", "webrtc-base64.txt"),
+    ("spl_sqrt_floor (in WebRTC)", "webrtc-spl_sqrt_floor.txt"), ("WebRTC: patent grant", "webrtc-PATENTS.txt"),
+]
+
+
+def webrtc_notices(webrtc_licence):
+    """BSD-3-WebRTC.txt: WebRTC's licence, then each project's inside it (tools/mcd-cloud-notices/webrtc)."""
+    folder = Path(__file__).resolve().parent / "mcd-cloud-notices" / "webrtc"
+    parts = ["WebRTC.framework, as OpenNOW ships it (embedded in MCD).\n\n" + webrtc_licence,
+             "\nWebRTC.framework contains code from the projects below; their notices follow "
+             "(tools/mcd-cloud-notices/webrtc/README.md in MCD's source says how they were found).\n"]
+    for title, name in WEBRTC_NOTICES:
+        body = (folder / name).read_text(encoding="utf-8").strip("\n")
+        parts.append(f"\n--- {title} ---\n\n{body}\n")
+    return "".join(parts)
+
 def fail(message):
     sys.exit("mcd-cloud-vendor: " + message)
 
@@ -316,7 +342,7 @@ def main():
                                + text("OpenNOW-Mac-MIT.txt"),
             "Apache-2.0-OpenSSL.txt": "OpenSSL, as built by OpenNOW (linked statically into MCD Cloud).\n\n" + text("OpenSSL-Apache-2.0.txt"),
             "BSD-3-usrsctp.txt": "usrsctp, as built by OpenNOW (linked statically into MCD Cloud).\n\n" + text("usrsctp-BSD.txt"),
-            "BSD-3-WebRTC.txt": "WebRTC.framework, as OpenNOW ships it (embedded in MCD).\n\n" + text("WebRTC-BSD-3-Clause.txt"),
+            "BSD-3-WebRTC.txt": webrtc_notices(text("WebRTC-BSD-3-Clause.txt")),
         }
 
         # 5. The record.
