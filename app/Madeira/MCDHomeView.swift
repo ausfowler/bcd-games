@@ -48,10 +48,11 @@ enum MCDMotion {
     private static let key = "mcd.home.selected"
     init() { selectedID = UserDefaults.standard.string(forKey: Self.key) }
 
-    /// Claw Deck's order: the most recently played first, then the rest by title.
+    /// Claw Deck's order: the most recently played first (MCD Cloud: in the cloud too), then the rest by title.
     static func order(_ games: [BCDGame]) -> [BCDGame] {
-        games.sorted { a, b in
-            switch (a.lastPlayed, b.lastPlayed) {
+        let cards = MCDCloudCards.shared
+        return games.sorted { a, b in
+            switch (cards.lastPlayed(a)?.date, cards.lastPlayed(b)?.date) {
             case let (x?, y?): return x > y
             case (_?, nil): return true
             case (nil, _?): return false
@@ -92,10 +93,11 @@ enum MCDMotion {
         withAnimation(MCDMotion.glide) { selectedID = id }
     }
 
-    func setExpanded(_ on: Bool) {
+    /// `game`: the card that flips open; it opens on Cloud when the cloud is where it was last played (phase 4).
+    func setExpanded(_ on: Bool, game: BCDGame? = nil) {
         withAnimation(MCDMotion.flip) {
             expanded = on
-            if on { cardButton = .main }
+            if on { cardButton = game.map { MCDCloudCards.shared.opensOnCloud($0) } == true ? .cloud : .main }
         }
     }
 }
@@ -130,6 +132,8 @@ struct MCDHomeView: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .contentShape(Rectangle())
+            // A tap anywhere off the flipped card turns it back (its own buttons and its face keep theirs).
+            .onTapGesture { if model.expanded { model.setExpanded(false) } }
             .gesture(swipe(games))
         }
     }
@@ -178,8 +182,9 @@ struct MCDHomeView: View {
                     .position(center)
                     .zIndex(isSelected ? 100 : Double(10 - abs(i - selected)))
                     .onTapGesture {
-                        if isSelected { model.setExpanded(!model.expanded) }
-                        else { model.setExpanded(false); model.select(game.id) }
+                        if isSelected { model.setExpanded(!model.expanded, game: game) }
+                        else if model.expanded { model.setExpanded(false) }   // off the flipped card: back to the carousel
+                        else { model.select(game.id) }
                     }
             }
             if !model.expanded, games.indices.contains(selected) {
@@ -306,7 +311,8 @@ struct MCDCarouselCard: View, Animatable {
                     BCDGameStatusLine(game: game).font(BCDStyle.body(14 * s))
                 }
                 HStack(alignment: .top, spacing: 22 * s) {
-                    fact("Last played", game.lastPlayed.map { BCDFormat.ago($0) } ?? "Never")
+                    // MCD Cloud (phase 4): "Today · Cloud" when the cloud is where it was last played.
+                    fact("Last played", MCDCloudCards.shared.lastPlayed(game).map { BCDFormat.ago($0.date) + ($0.cloud ? " · Cloud" : "") } ?? "Never")
                     if game.minutesPlayed > 0 { fact("Played", BCDFormat.playtime(game.minutesPlayed)) }
                     if let size = game.size { fact(game.state.isInstalled ? "Installed" : "Download", BCDFormat.bytes(size)) }
                 }

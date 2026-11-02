@@ -82,8 +82,12 @@ for path in sorted(APP.rglob("*")):
     for n, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
         if names.search(line):
             where.setdefault(path.name, []).append(line.strip())
-check("only three files outside the new ones mention it: ContentView (two lines), GuestDisplay and BCDSettingsSections, one hook each",
-      {k: len(v) for k, v in where.items()} == {"ContentView.swift": 2, "GuestDisplay.swift": 1, "BCDSettingsSections.swift": 2}, where)
+# MCD (ausfowler/bcd-games, 2026-11-02): BCDFrontEnd's MCDDuo reads the model once (the Duo's top bar), by the device only.
+check("only four files outside the new ones mention it: ContentView (two lines), GuestDisplay and BCDSettingsSections, one hook each, "
+      "and MCD's BCDFrontEnd (MCDDuo, the device only, never the switch)",
+      {k: len(v) for k, v in where.items()} == {"ContentView.swift": 2, "GuestDisplay.swift": 1, "BCDSettingsSections.swift": 2,
+                                               "BCDFrontEnd.swift": 1}
+      and where.get("BCDFrontEnd.swift") == ["static let isThisPhone = BCDFoldableDevice.isThisDevice"], where)
 content = (APP / "ContentView.swift").read_text()
 check("the game view's hook tests the gate first and sits at the end of the layout pass's window branch",
       re.search(r"winios_set_compositor_frame\(full\.minX, full\.minY, full\.width, full\.height\)\n"

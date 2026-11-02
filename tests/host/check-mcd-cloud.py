@@ -150,8 +150,45 @@ check(".modifier(MCDCloudHost(model: MCDCloudPlay.shared))" in front and "MCDClo
 check("MCDCloudPlayLive.shared.start()" in (app / "BCDLiveFrontEnd.swift").read_text(),
       "the live front end installs the cloud screen's actions")
 host = (app / "MCDCloudPlay.swift").read_text()
-check(".onChange(of: model.stage == .streaming) { _, streaming in focus.enabled = !streaming }" in host,
-      "the interface reads no controller while the stream has it")
+sync = host[host.index("    private func sync() {"):]
+sync = sync[:sync.index("\n    }\n")]
+check("if focus.enabled == streaming { focus.enabled = !streaming }" in sync and "focus.openLayer(Self.layer)" in sync
+      and ".onAppear { sync() }" in host and "onDisappear" not in host[host.index("struct MCDCloudHost"):host.index("struct MCDCloudButton")],
+      "the interface reads no controller while the stream has it, and the screen takes it back whenever it shows (never closed on disappearing)")
+
+# Phase 4: the stream's mode for the screen (MCDStreamFit), the same rule run here over OpenNOW's table.
+store_src = (sources / "OpenNOWStore.swift").read_text()
+table = re.findall(r'\.init\(value: "(\d+)x(\d+)", aspectRatio: "([\d:]+)", tier: "\d+", requiredPlan: \.(\w+)\)', store_src)
+aspects = re.search(r'static let aspectRatioOptions = \[([^\]]+)\]', store_src).group(1).replace('"', "").replace(" ", "").split(",")
+plans = {"free": 0, "priority": 1, "ultimate": 2}
+import math
+def fit(w, h, plan, max_fps):
+    w, h = max(w, h), min(w, h)
+    shape = w / h
+    def ratio(a):
+        x, y = a.split(":"); return float(x) / float(y)
+    aspect = min(aspects, key=lambda a: abs(math.log(ratio(a) / shape)))   # first of equals, as Swift's min
+    allowed = [(int(a), int(b)) for a, b, asp, p in table if asp == aspect and plans[p] <= plan]
+    fitting = [s for s in allowed if s[0] <= w and s[1] <= h]
+    pick = max(fitting, key=lambda s: s[0] * s[1]) if fitting else min(allowed, key=lambda s: s[0] * s[1])
+    return aspect, f"{pick[0]}x{pick[1]}", 120 if plan >= 2 and max_fps >= 120 else 60
+check(len(table) == 28 and aspects == ["16:9", "16:10", "4:3", "5:4", "20:9", "21:9", "24:10", "32:9"], "OpenNOW's mode table as MCDStreamFit reads it")
+duo_open = fit(951 * 3, 669 * 3, 1, 120)
+check(duo_open == ("4:3", "1600x1200", 60), f"the Duo's open screen (951x669 pt at 3x) on Performance: {duo_open}")
+check(fit(951 * 3, 669 * 3, 2, 120) == ("4:3", "1600x1200", 120), "... on Ultimate, at 120 fps")
+check(fit(932 * 3, 430 * 3, 1, 120) == ("20:9", "2400x1080", 60) and fit(932 * 3, 430 * 3, 0, 60) == ("20:9", "1600x720", 60),
+      "an iPhone Pro Max: 20:9, 2400x1080 on Performance, 1600x720 free")
+fit_src = (mcd / "MCDStreamFit.swift").read_text()
+check("let fitting = allowed.filter { size($0).width <= width && size($0).height <= height }" in fit_src
+      and "(plan >= .ultimate && maxFPS >= 120) ? 120 : 60" in fit_src, "MCDStreamFit is that rule")
+check("settingsOverride: screen" in stream and 'guard settings.preferredResolution == "Auto" else { return nil }' in stream,
+      "a new session asks for the screen's mode (unless a resolution was chosen by hand)")
+check(stream.index("await store.refreshRemoteSessions()") < stream.index("await store.resumeSession(candidate: running)")
+      < stream.index("await store.launch(game: request.game"),
+      "a session the game already has is resumed as it runs, never ended for a new one at another size (folding: option A)")
+cards = (app / "MCDCloudCards.swift").read_text()
+check("static let sameSession: TimeInterval = 15 * 60" in cards and "opensOnCloud" in (app / "MCDHomeView.swift").read_text(),
+      "a card opens on Cloud when the cloud is where it was last played")
 for name, ident in (("MCDCloudPlay.swift", "A1000F08"), ("MCDCloudPlayLive.swift", "A1000F09")):
     check(f"{ident} /* {name} in Sources */," in pbx, f"{name} is built into the app")
 check("NativeStreamPresentation {\n                StreamerView(" in stream and "QueueAdPlayerCard(ad: ad, compact: true)" in stream,

@@ -6,6 +6,7 @@
 // Library, Settings and every other destination; Claw Deck's top pill, status pill and hint bar.
 // Modified 2026-11-02: the flipped card's Cloud button (MCD Cloud, layout A) and what A does on it.
 // Modified 2026-11-02 (phase 3): Cloud plays the game: MCD's cloud screen (MCDCloudPlay.swift) over the shell.
+// Modified 2026-11-02 (phase 4): the iPhone Duo's top bar: JIT in the menu, the title on one line, the camera kept clear.
 
 import SwiftUI
 import UIKit
@@ -174,7 +175,7 @@ struct BCDFrontEnd: View {
                 }))
                 list.append((BCDHint(button: .b, title: "Back"), { carousel.setExpanded(false) }))
             } else {
-                list.append((BCDHint(button: .a, title: "Select"), { if current != nil { carousel.setExpanded(true) } }))
+                list.append((BCDHint(button: .a, title: "Select"), { if let current { carousel.setExpanded(true, game: current) } }))
             }
             if let game = current { list.append((BCDHint(button: .x, title: "Options"), { cardMenu.showCard(game.id) })) }
             focus.steer = { direction in
@@ -267,10 +268,19 @@ struct BCDFrontEnd: View {
     /// clock and the menu, with the gear and the JIT/memory status inside the menu. Whichever is shown fits the screen, so
     /// the bar can never lay the whole app out wider than the display again.
     private var topBar: some View {
-        ViewThatFits(in: .horizontal) {
-            topBarRow(compact: false)
-            topBarRow(compact: true)
+        Group {
+            if MCDDuo.isThisPhone {
+                // MCD (phase 4): on the iPhone Duo always the compact bar, JIT's state in the menu (Status), as its open screen
+                // already had it. Closed and on its side one way, the full bar used to fit, and ran under the camera.
+                topBarRow(compact: true)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    topBarRow(compact: false)
+                    topBarRow(compact: true)
+                }
+            }
         }
+        .modifier(MCDCameraClearance())
         .padding(.horizontal, layout.gutter).padding(.top, layout == .pad ? 12 : 8).padding(.bottom, 6)
     }
 
@@ -339,9 +349,10 @@ struct BCDFrontEnd: View {
 
     private var portraitTitle: some View {
         HStack {
-            Text(tab.title).font(BCDStyle.title(30))
+            // MCD (phase 4): one line, never "Game / s"; the Duo's JIT state is in the menu (Status), not beside it.
+            Text(tab.title).font(BCDStyle.title(30)).lineLimit(1).minimumScaleFactor(0.6).layoutPriority(1)
             Spacer()
-            statusChips
+            if !MCDDuo.isThisPhone { statusChips }
             menuButton
             settingsButton
         }
@@ -621,6 +632,20 @@ struct MCDUpdateNotice: View {
     }
 }
 
+/// MCD (phase 4): this phone is the iPhone Duo (by its model, whatever the experimental foldable switch says): the
+/// shell's top bar is the compact one, with JIT's state in the menu, and keeps clear of the closed screen's camera.
+enum MCDDuo {
+    static let isThisPhone = BCDFoldableDevice.isThisDevice
+}
+
+/// The top bar's room for the iPhone Duo's camera (MCDSafeSides.cameraRoom); none anywhere else.
+struct MCDCameraClearance: ViewModifier {
+    @ObservedObject private var sides = MCDSafeSides.shared
+    func body(content: Content) -> some View {
+        content.padding(.leading, sides.camera)
+    }
+}
+
 /// MCD: content centred on the whole screen with even sides. In landscape the Duo keeps its status icons in a strip down one
 /// side (the safe area), and content laid out beside it sat off centre. This takes the content out to both screen edges and
 /// pads each side by the larger of the two insets, so it clears the strip and has the same room on the left as on the right.
@@ -643,7 +668,29 @@ struct MCDEvenSides: ViewModifier {
 @MainActor final class MCDSafeSides: ObservableObject {
     static let shared = MCDSafeSides()
     @Published private(set) var even: CGFloat = 0
+    /// MCD (phase 4): room the top bar leaves on its leading side for the iPhone Duo's camera (MCDCameraClearance).
+    @Published private(set) var camera: CGFloat = 0
     private var pending: CGFloat?
+
+    /// The iPhone Duo closed and on its side with the camera at the top left reports no inset for the camera, so the
+    /// bar ran under it (Austin's screenshot, 2026-11-02: the camera reaches 9.75% of the width in). On the closed
+    /// screen on its side, either way round (which way puts the camera there is not assumed: the other way the pill
+    /// only sits a little further in), this much of the width is kept clear at the bar's leading side.
+    static func cameraRoom(foldable: Bool, size: CGSize) -> CGFloat {
+        guard foldable, size.width > size.height,
+              size.width < 940 else { return 0 }   // the open screen is 951 pt wide (the foldable log); narrower is the closed one
+        return (size.width * 0.10).rounded()
+    }
+
+    func report(view: UIView) {
+        report(view.safeAreaInsets)
+        let value = Self.cameraRoom(foldable: MCDDuo.isThisPhone, size: view.bounds.size)
+        guard value != camera else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, value != self.camera else { return }
+            self.camera = value
+        }
+    }
 
     func report(_ insets: UIEdgeInsets) {
         let value = max(insets.left, insets.right)
@@ -664,11 +711,16 @@ struct MCDSafeAreaProbe: UIViewRepresentable {
     final class Probe: UIView {
         override func safeAreaInsetsDidChange() {
             super.safeAreaInsetsDidChange()
-            MCDSafeSides.shared.report(safeAreaInsets)
+            MCDSafeSides.shared.report(view: self)
         }
         override func didMoveToWindow() {
             super.didMoveToWindow()
-            if window != nil { MCDSafeSides.shared.report(safeAreaInsets) }
+            if window != nil { MCDSafeSides.shared.report(view: self) }
+        }
+        // MCD (phase 4): a turn changes the size (and the camera's side) even where the insets stay the same.
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            if window != nil { MCDSafeSides.shared.report(view: self) }
         }
     }
     func makeUIView(context: Context) -> Probe {

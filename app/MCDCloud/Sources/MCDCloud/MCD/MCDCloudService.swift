@@ -81,6 +81,8 @@ public final class MCDCloudService: ObservableObject {
     @Published public internal(set) var queueAd = false
     /// OpenNOW's words for a problem the session has now (a poll failed, a resume failed); nil when none.
     @Published public internal(set) var notice: String?
+    /// The mode a new session asked for, in words ("1600 × 1200 · 60 fps"); nil for a resumed one.
+    @Published public internal(set) var mode: String?
     /// MCD asked for the session (play) and has not let it go (leave, dismissFailure).
     var requested = false
     /// play's own launch is running (OpenNOWStore.launch, awaited).

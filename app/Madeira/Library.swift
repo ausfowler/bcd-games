@@ -111,6 +111,12 @@ final class LibraryController: ObservableObject, @unchecked Sendable {
     /// One sample of player 1's pad, in XInput button bits and stick units.
     /// MCD (2026-10-31): the triggers' last state (bit 1 LT, bit 2 RT), for the Library's page turns.
     private var lastTriggers: UInt8 = 0
+    /// MCD (2026-11-02): the direction held for repeating (D-pad bits; the left stick counts while the
+    /// interface owns input) and when it next repeats.
+    private var repeatHeld: UInt16 = 0
+    private var repeatAt: TimeInterval = 0
+    static let repeatDelay: TimeInterval = 0.35
+    static let repeatEvery: TimeInterval = 0.12
 
     func sample(buttons raw: UInt16, lx: Int16, ly: Int16, lt: UInt8 = 0, rt: UInt8 = 0) {
         lock.lock()
@@ -125,6 +131,21 @@ final class LibraryController: ObservableObject, @unchecked Sendable {
         let triggers: UInt8 = (lt > 128 ? 1 : 0) | (rt > 128 ? 2 : 0)
         let triggersPressed = triggers & ~lastTriggers; lastTriggers = triggers
         let own = owns, announce = !announced; announced = true
+        // MCD (2026-11-02): a direction held moves again and again, everywhere the controller drives MCD's
+        // interface (BCDFocus's own timing): once when pressed, then after 0.35 s every 0.12 s until let go.
+        // A change of direction starts over. Only while the interface owns input; a game gets none of it.
+        var repeated: UInt16 = 0
+        let held = own ? buttons & 0x000F : 0
+        let now = ProcessInfo.processInfo.systemUptime
+        if held == 0 {
+            repeatHeld = 0
+        } else if held != repeatHeld || pressed & 0x000F != 0 {
+            repeatHeld = held
+            repeatAt = now + Self.repeatDelay
+        } else if now >= repeatAt {
+            repeated = held
+            repeatAt = now + Self.repeatEvery
+        }
         var homeHeld = false
         if holdHome || BCDChordSetting.mode == .holdGuide { homeHeld = holdingHome(buttons) }   // BCD: env.MADEIRA_MENU_HOME_HOLD (opt-in), or the menu's "Hold Home"; off, nothing is timed
         var startHeld = false
@@ -142,6 +163,12 @@ final class LibraryController: ObservableObject, @unchecked Sendable {
             }
             if command == nil, triggersPressed & 1 != 0 { command = "page-previous" }
             if command == nil, triggersPressed & 2 != 0 { command = "page-next" }
+            // MCD: a held direction's repeat, when nothing was pressed just now (a press never waits behind one).
+            if command == nil, repeated != 0 {
+                for (mask, name): (UInt16, String) in [(1, "up"), (2, "down"), (4, "left"), (8, "right")] where repeated & mask != 0 {
+                    command = name; break
+                }
+            }
         }
         if homeHeld { command = "home" }
         if startHeld { command = "menu" }

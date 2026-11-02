@@ -138,8 +138,31 @@ extension MCDCloudService {
             if endingFirst {
                 await store.endSession(cancelPendingLaunch: false)
                 guard !Task.isCancelled else { return }
+            } else {
+                // Phase 4 (folding: option A, nothing ever restarts). A session this game already has on GeForce NOW
+                // (started on the other screen, on another device, before the app was closed) is resumed as it runs:
+                // OpenNOW's launch would end it and start another when its mode differs from the one asked for here.
+                await store.refreshRemoteSessions()
+                guard !Task.isCancelled else { return }
+                let appID = request.launchOption?.appId ?? request.game.launchAppId
+                if let appID, let running = store.resumableSessions.first(where: { $0.appId == appID && (1...3).contains($0.status) }) {
+                    self?.mode = nil
+                    await store.resumeSession(candidate: running)
+                    guard let self, !Task.isCancelled else { return }
+                    self.launching = false
+                    if store.activeSession == nil, self.requested, !self.endRequested {
+                        self.failure = Self.words(store.sessionError)
+                            ?? (store.lastError != lastErrorBefore ? Self.words(store.lastError) : nil)
+                            ?? "GeForce NOW couldn't resume the session that's running. Try again in a moment."
+                    }
+                    self.readSession()
+                    return
+                }
             }
-            await store.launch(game: request.game, launchOption: request.launchOption)
+            // The mode for the screen in use now (MCDStreamFit); kept for the whole session.
+            let screen = self?.screenSettings(store)
+            self?.mode = screen.map { "\($0.preferredResolution.replacingOccurrences(of: "x", with: " × ")) · \($0.preferredFPS) fps" }
+            await store.launch(game: request.game, launchOption: request.launchOption, settingsOverride: screen)
             guard let self, !Task.isCancelled else { return }
             self.launching = false
             // A launch that returns with no session failed; OpenNOW put why in sessionError (most
@@ -152,6 +175,25 @@ extension MCDCloudService {
             self.readSession()
         }
         readSession()
+    }
+
+    /// OpenNOW's settings with the mode for the screen the app is on (MCDStreamFit), for a new session; nil
+    /// keeps OpenNOW's own (no scene to measure, or a resolution someone chose that is not Auto).
+    func screenSettings(_ store: OpenNOWStore) -> AppSettings? {
+        var settings = store.settings
+        guard settings.preferredResolution == "Auto" else { return nil }
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else { return nil }
+        let points = scene.coordinateSpace.bounds.size
+        let scale = scene.screen.nativeScale
+        let tier = store.subscription?.membershipTier ?? store.user?.membershipTier
+        let fit = MCDStreamFit.choose(pixels: CGSize(width: points.width * scale, height: points.height * scale),
+                                      plan: StreamSettingsResolver.plan(for: tier),
+                                      maxFPS: scene.screen.maximumFramesPerSecond)
+        settings.preferredAspectRatio = fit.aspectRatio
+        settings.preferredResolution = fit.resolution
+        settings.preferredFPS = fit.fps
+        return settings
     }
 
     // MARK: Reading

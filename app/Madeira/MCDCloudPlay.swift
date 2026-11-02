@@ -43,6 +43,8 @@ struct MCDCloudConflict: Equatable {
     @Published private(set) var queueAd = false
     /// A problem the session has now, in OpenNOW's words.
     @Published private(set) var notice: String?
+    /// The mode the session asked GeForce NOW for ("1600 × 1200 · 60 fps"), while it starts.
+    @Published private(set) var mode: String?
 
     // The live side (MCDCloudPlayLive.swift); nothing happens until it is installed.
     var start: (BCDGame) -> Void = { _ in }
@@ -71,12 +73,19 @@ struct MCDCloudConflict: Equatable {
 
     /// The live side's reading of the session. The screen closes when nothing is left to show; a
     /// stream that starts (a resume) opens it, so Exit lands on it.
-    func apply(stage: MCDCloudStage?, title: String?, conflict: MCDCloudConflict?, queueAd: Bool, notice: String?) {
+    func apply(stage: MCDCloudStage?, title: String?, conflict: MCDCloudConflict?, queueAd: Bool, notice: String?, mode: String?) {
+        // Phase 4: when it was last played in the cloud: its stream coming on screen or leaving it, and a session it
+        // streamed in ending (Steam dates its own record of the session from there).
+        let streamed = self.stage == .paused || self.stage == .ending
+        if let game, (stage == .streaming) != (self.stage == .streaming) || (stage == nil && streamed) {
+            MCDCloudCards.shared.notePlayed(game.id)
+        }
         if stage != self.stage { self.stage = stage }
         if title != self.title { self.title = title }
         if conflict != self.conflict { self.conflict = conflict }
         if queueAd != self.queueAd { self.queueAd = queueAd }
         if notice != self.notice { self.notice = notice }
+        if mode != self.mode { self.mode = mode }
         if stage == .streaming, !open { open = true }
         if stage == nil, conflict == nil, open { open = false }
     }
@@ -102,17 +111,14 @@ struct MCDCloudHost: ViewModifier {
                 }
             }
             .animation(.easeOut(duration: 0.2), value: model.open)
-            .onChange(of: model.open) { _, open in
-                if open { focus.openLayer(Self.layer) } else { focus.closeLayer(Self.layer) }
-                install()
-            }
-            .onChange(of: model.stage) { _, _ in install() }
-            .onChange(of: model.conflict) { _, _ in install() }
-            .onChange(of: model.stage == .streaming) { _, streaming in focus.enabled = !streaming }
-            .onDisappear {
-                guard model.open else { return }
-                focus.closeLayer(Self.layer)
-            }
+            // Phase 4 fix: while the stream is up full screen, iOS takes the shell off screen, and SwiftUI may
+            // say it disappeared and skip changes meanwhile. So nothing closes the layer on disappearing (that
+            // gave the controller to Home, under the paused screen), and every change, and every appearance,
+            // puts the controller where the screen stands now.
+            .onAppear { sync() }
+            .onChange(of: model.open) { _, _ in sync() }
+            .onChange(of: model.stage) { _, _ in sync() }
+            .onChange(of: model.conflict) { _, _ in sync() }
     }
 
     /// What the buttons do now, in the order the screen shows them.
@@ -138,8 +144,16 @@ struct MCDCloudHost: ViewModifier {
         }
     }
 
-    private func install() {
-        guard model.open else { return }
+    /// The controller as the screen stands: no interface input while the stream has the controller; the
+    /// layer and its buttons while the screen is up; Home's back (closing the layer) once it is not.
+    private func sync() {
+        let streaming = model.stage == .streaming
+        if focus.enabled == streaming { focus.enabled = !streaming }
+        guard model.open else {
+            focus.closeLayer(Self.layer)   // nothing when it is not open
+            return
+        }
+        focus.openLayer(Self.layer)        // nothing when it is already the top layer
         focus.setHandlers(buttons.map { (BCDHint(button: $0.button, title: $0.title), $0.action) })
     }
 }
@@ -180,6 +194,9 @@ struct MCDCloudScreen: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
             status
+            if let mode = model.mode, model.conflict == nil, model.stage.map(Self.starting) == true {
+                Text(mode).font(BCDStyle.label(13)).foregroundStyle(BCDStyle.textSoft).monospacedDigit()
+            }
             if let notice = model.notice {
                 Text(notice)
                     .font(BCDStyle.body(14))
@@ -247,6 +264,14 @@ struct MCDCloudScreen: View {
             case .streaming?, nil:
                 EmptyView()
             }
+        }
+    }
+
+    /// The stages before the stream, when the mode asked for is worth showing.
+    private static func starting(_ stage: MCDCloudStage) -> Bool {
+        switch stage {
+        case .starting, .waiting: return true
+        default: return false
         }
     }
 

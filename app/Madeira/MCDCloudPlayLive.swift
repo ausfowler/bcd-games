@@ -89,7 +89,7 @@ import UIKit
         }
         MCDCloudPlay.shared.apply(stage: stage, title: service.sessionTitle,
                                   conflict: service.conflict.map { MCDCloudConflict(running: $0.running, requested: $0.requested) },
-                                  queueAd: service.queueAd, notice: service.notice)
+                                  queueAd: service.queueAd, notice: service.notice, mode: service.mode)
         shared.orphanedHold()
     }
 
