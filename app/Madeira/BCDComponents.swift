@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright 2026 thebcd69 (BCD)
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
+// Modified 2026-11-02 (ausfowler/bcd-games, Mobile Claw Deck, phase 4d): BCDCoverCard's `roomy` (two-line titles) and
+// BCDGameStatusLine's `iconOnly`, for the iPhone Duo's closed screen.
 
 import SwiftUI
 import UIKit
@@ -206,6 +208,9 @@ struct BCDCoverCard: View {
     let game: BCDGame
     let focusID: String
     var showText = true
+    /// MCD (phase 4d): the closed Duo's larger covers: the title on up to two lines (both always kept, so a row's
+    /// captions line up) and "Not installed" as its icon alone.
+    var roomy = false
     let open: () -> Void
 
     var body: some View {
@@ -227,8 +232,9 @@ struct BCDCoverCard: View {
                     .overlay(BCDHairline(radius: radius, top: lit ? 0.6 : 0.32, bottom: 0.04).allowsHitTesting(false))
                 if showText {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(game.title).font(BCDStyle.label(layout == .pad ? 14 : 13)).lineLimit(1)
-                        BCDGameStatusLine(game: game, compact: true)
+                        Text(game.title).font(BCDStyle.label(layout == .pad ? 14 : 13))
+                            .lineLimit(roomy ? 2 : 1, reservesSpace: roomy)
+                        BCDGameStatusLine(game: game, compact: true, iconOnly: roomy)
                     }
                     .padding(.horizontal, 2)
                 }
@@ -307,17 +313,31 @@ struct BCDGameStatusLine: View {
     let game: BCDGame
     /// Under a narrow cover: the state in a word or two.
     var compact = false
+    /// MCD (phase 4d): with `compact`, a game not installed and of no known size shows its icon alone (the word is its
+    /// accessibility label).
+    var iconOnly = false
     var body: some View {
         HStack(spacing: compact ? 5 : 6) {
             if let color = dot { Circle().fill(color).frame(width: compact ? 7 : 8, height: compact ? 7 : 8) }
-            if compact, case .notInstalled = game.state { Image(systemName: "arrow.down.circle").font(.system(size: 11, weight: .semibold)) }
-            Text(compact ? short : text).lineLimit(1).minimumScaleFactor(compact ? 0.8 : 1)
+            if compact, case .notInstalled = game.state {
+                Image(systemName: "arrow.down.circle").font(.system(size: 11, weight: .semibold))
+                    .accessibilityLabel("Not installed")
+                    .accessibilityHidden(!wordless)   // with words beside it, the words say it
+            }
+            if !wordless {
+                Text(compact ? short : text).lineLimit(1).minimumScaleFactor(compact ? 0.8 : 1)
+            }
             if compact, game.state.isInstalled, game.place == .externalDrive {
                 Image(systemName: "externaldrive.fill").font(.system(size: 10)).accessibilityLabel("on the external drive")
             }
         }
         .font(BCDStyle.body(compact ? 12 : 13))
         .foregroundStyle(dot == nil ? BCDStyle.textSoft : (compact ? BCDStyle.textSoft : BCDStyle.text))
+    }
+    /// The icon alone: `iconOnly`, a game not installed, and no size to show (with one, the size is the words).
+    private var wordless: Bool {
+        guard compact, iconOnly, case .notInstalled = game.state else { return false }
+        return game.size == nil
     }
     private var short: String {
         switch game.state {

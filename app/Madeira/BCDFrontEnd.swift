@@ -10,6 +10,7 @@
 // Modified 2026-11-02 (phase 4b): even sides inside the safe area (the closed Duo sat off centre one way round); the camera's
 // room only the camera's way round; the top bar never wider than the screen.
 // Modified 2026-11-02 (phase 4c): the Y menu's Carousel size on Home.
+// Modified 2026-11-02 (phase 4d): the closed Duo upright: the tabs in a glass side bar (MCDSideTabs) in the status strip.
 
 import SwiftUI
 import UIKit
@@ -47,6 +48,15 @@ struct BCDFrontEnd: View {
 
     private var layout: BCDLayout { BCDLayout.of(horizontal: horizontal, vertical: vertical) }
 
+    /// MCD (phase 4d): the window's side strips and whether this is the Duo's closed screen.
+    @ObservedObject private var sides = MCDSafeSides.shared
+    /// The closed Duo upright: Games, Library and Downloads in the glass side bar, in the status strip under iOS's own icons,
+    /// instead of the tab bar along the bottom. Only where the strip is wide enough for the bar (MCDSideTabs.minimumWidth);
+    /// otherwise the bottom bar, as everywhere else.
+    private var sideTabs: Bool {
+        layout == .phonePortrait && sides.duoClosed && sides.evenInset >= MCDSideTabs.minimumWidth
+    }
+
     /// The hint bar under the screen: a controller was the last input and the screen has buttons.
     /// (Never on an upright iPhone, which has the tab bar there.) The screens read it as `\.bcdHintBar`.
     private var hintBarShown: Bool { layout != .phonePortrait && focus.controllerActive && !focus.hints.isEmpty }
@@ -74,12 +84,22 @@ struct BCDFrontEnd: View {
                 else { portraitTitle }
             }
             // MCD: even room at both sides of the screen (the Duo's status strip sits down one side).
-            .modifier(MCDEvenSides())
+            .modifier(MCDEvenSides(active: !(sideTabs && tab != .home)))
             .zIndex(2)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            if layout == .phonePortrait { portraitTabs }
+            // MCD (phase 4d): the closed Duo upright has its tabs in the glass side bar (the overlay below) instead.
+            if layout == .phonePortrait { if !sideTabs { portraitTabs } }
             else if hintBarShown { hintBar }
+        }
+        .overlay(alignment: sides.right >= sides.left ? .trailing : .leading) {
+            if sideTabs {
+                MCDSideTabs(tab: $tab, downloads: store.downloads.count, width: sides.evenInset)
+                    .frame(width: sides.evenInset)
+                    .frame(maxHeight: .infinity)
+                    // Into the strip beside the shell (the shell keeps to the safe area): its width, outwards.
+                    .offset(x: sides.right >= sides.left ? sides.evenInset : -sides.evenInset)
+            }
         }
         // MCD: Home's backdrop is the selected game's art behind the whole shell, bars included (Claw Deck).
         // MCD: a newer BCD is announced in the bottom-left corner, not in the top bar (it widened the bar past the screen).
@@ -142,8 +162,8 @@ struct BCDFrontEnd: View {
                 .bcdGamePage($openedGame, from: "Home")
                 .onAppear { cardMenu.openPage = { openedGame = $0 } }
         // MCD: the Library and Downloads are centred on the screen, with equal room at both sides (the hint bar's centre).
-        case .library: BCDLibraryView(searchRequest: librarySearch).modifier(MCDEvenSides())
-        case .downloads: BCDDownloadsView().modifier(MCDEvenSides())
+        case .library: BCDLibraryView(searchRequest: librarySearch).modifier(MCDEvenSides(active: !sideTabs))
+        case .downloads: BCDDownloadsView().modifier(MCDEvenSides(active: !sideTabs))
         }
     }
 
@@ -605,6 +625,63 @@ struct MCDTabPill: View {
     }
 }
 
+/// MCD (phase 4d): the closed Duo's tabs upright: Games, Library and Downloads stacked in one glass capsule in the status strip,
+/// below iOS's own icons (the time, signal, battery and a call's bubble keep the strip's top), centred on the screen's height.
+/// It replaces the tab bar along the bottom there, which gives the Library its height back. Each tab's word fits on one line
+/// in the strip's width ("Downloads" is the longest); a narrower strip than `minimumWidth` keeps the bottom bar instead.
+struct MCDSideTabs: View {
+    @Binding var tab: BCDTab
+    let downloads: Int
+    /// The strip's width, which the capsule fills less a small margin.
+    let width: CGFloat
+    /// Room for "Downloads" at 10 pt in a tab (the capsule's margin and padding are 6 pt a side).
+    static let minimumWidth: CGFloat = 60
+
+    var body: some View {
+        let item = max(width - 12, 44)
+        VStack(spacing: 4) {
+            ForEach(BCDTab.allCases) { value in
+                button(value, width: item)
+            }
+        }
+        .padding(3)
+        .bcdGlass(cornerRadius: (item + 6) / 2)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Tabs")
+    }
+
+    private func button(_ value: BCDTab, width: CGFloat) -> some View {
+        let on = tab == value
+        return Button { withAnimation(MCDMotion.pop) { tab = value } } label: {
+            VStack(spacing: 4) {
+                Image(systemName: value.symbol).font(.system(size: 19, weight: .semibold))
+                    .overlay(alignment: .topTrailing) {
+                        if value == .downloads && downloads > 0 {
+                            Text("\(downloads)").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                                .frame(minWidth: 14, minHeight: 14)
+                                .background(BCDStyle.accent, in: Capsule())
+                                .offset(x: 8, y: -5)
+                        }
+                    }
+                // One line, never cut: at its narrowest the word shrinks a little instead of ending in "...".
+                Text(value.title).font(.system(size: 10, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(on ? AnyShapeStyle(BCDStyle.glow) : AnyShapeStyle(Color.white.opacity(0.78)))
+            .frame(width: width, height: 58)
+            .background {
+                if on {
+                    Capsule().fill(Color.white.opacity(0.16))
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
+                }
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(value.title)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
 enum BCDTab: String, CaseIterable, Identifiable {
     case home, library, downloads
     var id: String { rawValue }
@@ -690,11 +767,14 @@ struct MCDCameraClearance: ViewModifier {
 /// two fed each other and the app froze half way through the turn.)
 struct MCDEvenSides: ViewModifier {
     @ObservedObject private var sides = MCDSafeSides.shared
+    /// MCD (phase 4d): false keeps to the safe area alone (the closed Duo upright with the glass side bar: the Library and
+    /// Downloads use the room on the side without the strip instead of mirroring the strip there).
+    var active = true
 
     func body(content: Content) -> some View {
         content
-            .padding(.leading, sides.leadingPad)
-            .padding(.trailing, sides.trailingPad)
+            .padding(.leading, active ? sides.leadingPad : 0)
+            .padding(.trailing, active ? sides.trailingPad : 0)
     }
 }
 
@@ -707,7 +787,10 @@ struct MCDEvenSides: ViewModifier {
     @Published private(set) var right: CGFloat = 0
     /// MCD (phase 4): room the top bar leaves on its leading side for the iPhone Duo's camera (MCDCameraClearance).
     @Published private(set) var camera: CGFloat = 0
-    private var pending: (left: CGFloat, right: CGFloat, camera: CGFloat)?
+    /// MCD (phase 4d): this is the iPhone Duo's closed screen (either way up): the Library shows fewer, larger covers, and
+    /// upright the tabs move to the glass side bar (MCDSideTabs).
+    @Published private(set) var duoClosed = false
+    private var pending: (left: CGFloat, right: CGFloat, camera: CGFloat, closed: Bool)?
     private var logged = ""
     /// MCD's log, set by the engine side (MCDCloudPlayLive.start): the preview app has no LogStore.
     static var log: ((String) -> Void)?
@@ -737,6 +820,13 @@ struct MCDEvenSides: ViewModifier {
         return (size.width * 0.10).rounded()
     }
 
+    /// The closed screen: 466 x 678 pt either way up; the open one is 951 x 669 (the foldable log), so its shorter side is
+    /// 669. Anything with a shorter side under 560 on the Duo is the closed screen; no other phone is ever "closed".
+    static func duoClosed(foldable: Bool, size: CGSize) -> Bool {
+        let short = min(size.width, size.height)
+        return foldable && short > 0 && short < 560
+    }
+
     func report(view: UIView) {
         // The window's insets, not the probe's own: they do not depend on where the probe was placed.
         let insets = view.window?.safeAreaInsets ?? view.safeAreaInsets
@@ -754,12 +844,14 @@ struct MCDEvenSides: ViewModifier {
             case .portraitUpsideDown?: turn = "portraitUpsideDown"
             default: turn = "unknown"
             }
-            let line = "[shell] \(Int(size.width))x\(Int(size.height)) \(turn): insets left \(Int(insets.left)) right \(Int(insets.right)) top \(Int(insets.top)) bottom \(Int(insets.bottom)), camera room \(Int(camera))"
+            let line = "[shell] \(Int(size.width))x\(Int(size.height)) \(turn): insets left \(Int(insets.left)) right \(Int(insets.right)) top \(Int(insets.top)) bottom \(Int(insets.bottom)), camera room \(Int(camera)), closed \(Self.duoClosed(foldable: true, size: size) ? 1 : 0)"
             if line != logged, let log = Self.log { logged = line; log(line) }
         }
-        let next = (left: insets.left, right: insets.right, camera: camera)
-        let current = pending ?? (left: left, right: right, camera: self.camera)
+        let closed = Self.duoClosed(foldable: MCDDuo.isThisPhone, size: size)
+        let next = (left: insets.left, right: insets.right, camera: camera, closed: closed)
+        let current = pending ?? (left: left, right: right, camera: self.camera, closed: duoClosed)
         guard abs(next.left - current.left) > 0.5 || abs(next.right - current.right) > 0.5 || next.camera != current.camera
+                || next.closed != current.closed
         else { return }
         pending = next
         DispatchQueue.main.async { [weak self] in
@@ -768,6 +860,7 @@ struct MCDEvenSides: ViewModifier {
             if abs(value.left - self.left) > 0.5 { self.left = value.left }
             if abs(value.right - self.right) > 0.5 { self.right = value.right }
             if value.camera != self.camera { self.camera = value.camera }
+            if value.closed != self.duoClosed { self.duoClosed = value.closed }
         }
     }
 }

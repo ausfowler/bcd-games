@@ -3,6 +3,8 @@
 // BCD Material: additional terms under GPL-3.0 section 7 apply; see LICENSE-BCD.md.
 // Modified 2026-10-31 (ausfowler/bcd-games, Mobile Claw Deck): a controller-first grid -- the D-pad steps
 // card by card through the whole library (MCDLibraryNav), the page follows the ring, LT/RT turn a page.
+// Modified 2026-11-02 (phase 4d): the iPhone Duo's closed screen: fewer, larger covers (5 across on its side, 3 by 2
+// upright), two-line titles, round buttons, a one-line Steam note; folding keeps the card in view (MCDLibraryNav.update).
 
 import SwiftUI
 
@@ -28,6 +30,10 @@ struct BCDLibraryView: View {
     @EnvironmentObject private var focus: BCDFocus
     /// MCD: the page shown and the controller's way through the cards and the toolbar.
     @ObservedObject private var nav = MCDLibraryNav.shared
+    /// MCD (phase 4d): the iPhone Duo's closed screen (MCDSafeSides.duoClosed): fewer, larger covers with two-line titles,
+    /// round buttons, a one-line Steam note. Every other screen is as before.
+    @ObservedObject private var sides = MCDSafeSides.shared
+    private var closed: Bool { sides.duoClosed }
 
     private var filter: BCDLibraryFilter { BCDLibraryFilter.allCases.first { $0.rawValue == filterKey } ?? .all }
     private var sort: BCDLibrarySort { BCDLibrarySort(rawValue: sortKey) ?? (sortByName ? .name : .played) }
@@ -139,7 +145,7 @@ struct BCDLibraryView: View {
     /// its controller action with it).
     private func rowButton(_ id: String, _ title: String, _ symbol: String, label: String? = nil,
                            _ run: @escaping () -> Void) -> some View {
-        let round = layout == .phonePortrait
+        let round = layout == .phonePortrait || closed   // MCD (phase 4d): round on the closed Duo either way up
         return Button(action: run) {
             Group {
                 if round {
@@ -237,8 +243,11 @@ struct BCDLibraryView: View {
                   store.games.contains(where: { $0.store == .steam }),
                   !store.games.contains(where: { $0.store == .steam && $0.state.isInstalled }) {
             // round 624 (agent N S10, 2FJV7P): a Steam account with games, none installed: how a Steam game starts
-            Text("None of your Steam games is installed yet. Tap one, then Install; BCD downloads it from Steam and Play starts it with Valve's own Steam client.")
-                .font(BCDStyle.body(14)).foregroundStyle(BCDStyle.textSoft)
+            // MCD (phase 4d): one short line on the Duo's closed screen, where the full one took the room of a row of covers.
+            Text(closed ? "Tap a game, then Install."
+                        : "None of your Steam games is installed yet. Tap one, then Install; BCD downloads it from Steam and Play starts it with Valve's own Steam client.")
+                .font(BCDStyle.body(closed ? 13 : 14)).foregroundStyle(BCDStyle.textSoft)
+                .lineLimit(closed ? 1 : nil)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -325,7 +334,7 @@ struct BCDLibraryView: View {
     /// One page of cards, sized from the room it has: as many columns as fit at the old grid's minimum width,
     /// more while fewer than two rows would fit (Claw Deck shows two rows), and as many whole rows as fit.
     private func pagedGrid(in size: CGSize) -> some View {
-        let g = MCDLibraryGrid(size: size, gutter: layout.gutter, layout: layout)
+        let g = MCDLibraryGrid(size: size, gutter: layout.gutter, layout: layout, closed: closed)
         let all = shown
         let perPage = g.columns * g.rows
         let pages = max(1, (all.count + perPage - 1) / perPage)
@@ -337,7 +346,7 @@ struct BCDLibraryView: View {
             ForEach(0..<rowCount, id: \.self) { row in
                 HStack(alignment: .top, spacing: g.spacing) {
                     ForEach(slice[(row * g.columns)..<min((row + 1) * g.columns, slice.count)]) { game in
-                        BCDCoverCard(game: game, focusID: "library.game.\(game.id)") { opened = game }
+                        BCDCoverCard(game: game, focusID: "library.game.\(game.id)", roomy: closed) { opened = game }
                             .frame(width: g.cardWidth)
                     }
                 }
@@ -418,12 +427,39 @@ struct MCDLibraryGrid {
 
     /// The caption under a cover (title and state).
     static let caption: CGFloat = 45
+    /// MCD (phase 4d): on the closed Duo, a title of up to two lines (BCDCoverCard's `roomy`).
+    static let roomyCaption: CGFloat = 62
 
-    init(size: CGSize, gutter: CGFloat, layout: BCDLayout) {
+    init(size: CGSize, gutter: CGFloat, layout: BCDLayout, closed: Bool = false) {
         let sp: CGFloat = layout == .pad ? 22 : 18
         let rsp: CGFloat = layout == .pad ? 22 : 14
         let usableW = size.width - 2 * max(gutter, 24), usableH = size.height - 10
         let portrait = layout == .phonePortrait || size.height > size.width * 1.1
+        if closed {
+            // MCD (phase 4d): the iPhone Duo's closed screen. Five across in one row on its side, three across upright in
+            // two rows (one when two would leave covers under 70 pt wide): larger covers, fewer to a page.
+            let cols = portrait ? 3 : 5
+            let gap: CGFloat = portrait ? 16 : 18
+            var rowCount = portrait ? 2 : 1
+            var width: CGFloat = 100
+            if usableW.isFinite, usableH.isFinite, usableW > 120, usableH > 120 {
+                let byWidth = (usableW - gap * CGFloat(cols - 1)) / CGFloat(cols)
+                func byHeight(_ rows: Int) -> CGFloat {
+                    ((usableH - rsp * CGFloat(rows - 1)) / CGFloat(rows) - Self.roomyCaption) / 1.5
+                }
+                width = min(byWidth, byHeight(rowCount))
+                if rowCount == 2 && width < 70 {
+                    rowCount = 1
+                    width = min(byWidth, byHeight(1))
+                }
+            }
+            spacing = gap
+            rowSpacing = rsp
+            columns = cols
+            rows = rowCount
+            cardWidth = max(width, 40)
+            return
+        }
         let cols = portrait ? 3 : 6
         var rowCount = 2
         var width: CGFloat = 100
@@ -471,6 +507,10 @@ struct MCDLibraryGrid {
     }
 
     func update(_ layout: Layout) {
+        // MCD (phase 4d): folding or unfolding changes how many cards a page holds. The card in view stays in view: the one
+        // the ring was last on when it is on the page shown, else the page's first, and the page becomes the one holding it.
+        let oldPerPage = perPage, oldPage = page
+        let sameGames = ids == layout.ids
         // Only what really changed is published (a rotation re-lays the grid; republishing the same values made more passes).
         if ids != layout.ids { ids = layout.ids }
         let c = max(layout.columns, 1), r = max(layout.rows, 1)
@@ -478,6 +518,13 @@ struct MCDLibraryGrid {
         if rows != r { rows = r }
         let p = max(1, (ids.count + perPage - 1) / perPage)
         if pages != p { pages = p }
+        if sameGames, perPage != oldPerPage, !ids.isEmpty {
+            let first = oldPage * oldPerPage
+            let shown = first..<min(first + oldPerPage, ids.count)
+            let anchor = lastCard.flatMap { ids.firstIndex(of: $0) }.flatMap { shown.contains($0) ? $0 : nil } ?? min(first, ids.count - 1)
+            let target = min(anchor / perPage, pages - 1)
+            if page != target { page = target }
+        }
         if page > pages - 1 { page = pages - 1 }
     }
 

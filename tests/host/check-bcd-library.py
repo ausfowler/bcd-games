@@ -127,7 +127,9 @@ check("Library: signed out of Steam, a card offers the sign-in",
 # Round 624 (agent N S10, 2FJV7P "How do i start my game with steam"; N S11, H0TBAZ with 1 GB free): how a Steam game starts, and low storage
 home = (APP / "BCDHomeView.swift").read_text() if "APP" in globals() else (app / "BCDHomeView.swift").read_text()
 check("Library and Home: a signed-in Steam account with games, none installed, is told to tap Install and then Play; Home warns under 3 GB free",
-      'Text("None of your Steam games is installed yet. Tap one, then Install; BCD downloads it from Steam and Play starts it with Valve\'s own Steam client.")' in library
+      # MCD (phase 4d): the full sentence everywhere but the iPhone Duo's closed screen, which has one short line
+      ': "None of your Steam games is installed yet. Tap one, then Install; BCD downloads it from Steam and Play starts it with Valve\'s own Steam client.")' in library
+      and 'Text(closed ? "Tap a game, then Install."' in library
       and '"Open a Steam game and tap Install: BCD downloads it itself. When it is done, tap Play."' in home
       and "private var steamNothingInstalled: Bool {" in home
       and 'if free < Int64(3) << 30 {' in home and '"Very little space is left. iOS closes apps in the background when it needs room, and games need space to start. "' in home)
