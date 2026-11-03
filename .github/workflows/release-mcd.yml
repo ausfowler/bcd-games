@@ -1,0 +1,104 @@
+# Mobile Claw Deck (MCD): publish a tested build as a GitHub release (added 2026-11-03).
+# Run by hand with the build run whose IPA was tested: the release gets that run's MCD IPA (renamed), a source archive of
+# that run's commit with every submodule at its pin (GPL: GitHub's own archives leave submodules out), and the notes file.
+name: Release MCD
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "The build-ipa run whose IPA was tested"
+        required: true
+      tag:
+        description: "Tag, e.g. v0.9-beta"
+        required: true
+      title:
+        description: "Release title, e.g. MCD 0.9 beta"
+        required: true
+      asset_name:
+        description: "Base name of the files, e.g. MCD-0.9-beta"
+        required: true
+      notes:
+        description: "Notes file in the repository, e.g. release-notes/MCD-0.9-beta.md"
+        required: true
+      prerelease:
+        description: "Mark as a pre-release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    if: github.repository == 'ausfowler/bcd-games'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.run_id }}
+      TAG: ${{ inputs.tag }}
+      TITLE: ${{ inputs.title }}
+      NAME: ${{ inputs.asset_name }}
+      NOTES: ${{ inputs.notes }}
+    steps:
+      - name: The tested run's commit
+        id: run
+        run: |
+          set -euo pipefail
+          case "$RUN_ID" in ''|*[!0-9]*) echo "::error::run_id is not a number"; exit 1 ;; esac
+          case "$NAME" in ''|*[!A-Za-z0-9._-]*) echo "::error::asset_name may hold only letters, digits, . _ -"; exit 1 ;; esac
+          info=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '[.head_sha, .conclusion, .path] | @tsv')
+          sha=$(cut -f1 <<<"$info"); conclusion=$(cut -f2 <<<"$info"); path=$(cut -f3 <<<"$info")
+          [ "$conclusion" = success ] || { echo "::error::run $RUN_ID did not succeed ($conclusion)"; exit 1; }
+          [ "$path" = .github/workflows/build-ipa.yml ] || { echo "::error::run $RUN_ID is not a build-ipa run ($path)"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "::notice::release of $sha (run $RUN_ID)"
+
+      - name: The tested IPA
+        uses: actions/download-artifact@v4
+        with:
+          pattern: BCD-unsigned-*
+          merge-multiple: true
+          path: ipa
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: The notes (from the branch the release is run on)
+        uses: actions/checkout@v4
+        with:
+          path: meta
+          sparse-checkout: release-notes
+          persist-credentials: false
+
+      - name: The tested commit, with every submodule
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.run.outputs.sha }}
+          submodules: recursive
+          path: src
+          persist-credentials: false
+
+      - name: Assets
+        run: |
+          set -euo pipefail
+          mkdir out
+          ipa=$(ls ipa/Madeira-*-unsigned.ipa)
+          [ "$(wc -l <<<"$ipa")" = 1 ] || { echo "::error::expected one Madeira IPA, found: $ipa"; exit 1; }
+          cp "$ipa" "out/${NAME}.ipa"
+          # The source: the tree without git's own folders, under one top-level folder.
+          XZ_OPT=-T0 tar --exclude-vcs --transform "s,^\.,${NAME}-source," -C src -cJf "out/${NAME}-source.tar.xz" .
+          case "$NOTES" in release-notes/*.md) ;; *) echo "::error::notes must be a file under release-notes/"; exit 1 ;; esac
+          case "$NOTES" in *..*) echo "::error::notes path holds .."; exit 1 ;; esac
+          cp "meta/${NOTES}" notes.md
+          (cd out && sha256sum * | tee SHA256SUMS.txt)
+          ls -la out
+
+      - name: Publish
+        run: |
+          set -euo pipefail
+          flag=""
+          [ "${{ inputs.prerelease }}" = true ] && flag="--prerelease"
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --target "${{ steps.run.outputs.sha }}" --title "$TITLE" \
+            --notes-file notes.md $flag out/*
