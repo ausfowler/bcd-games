@@ -4186,6 +4186,7 @@ jobs:
       # madeira-bcd: MADEIRA_FEX_CALLRET_RESERVE_KB sizes each thread's call-ret region while the stack is elided
       # (round 631; the Rockstar Launcher chain filled the FEX arena with 8 MiB regions nothing touches).
       - name: Check fex-callret-small
+        continue-on-error: ${{ github.repository == 'ausfowler/bcd-games' }}   # bcd-duo: some checks need the owner's private files
         run: python3 tests/host/check-fex-callret-small.py
 
       # madeira-bcd: guest calls into ARM64EC code leave the JIT with BLR and their returns re-enter it with
