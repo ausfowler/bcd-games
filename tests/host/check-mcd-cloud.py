@@ -135,9 +135,18 @@ check(all(s in aside for s in ("hub.setOn(false)", "GamepadInput.shared.setCloud
 gamepad = (app / "GamepadInput.swift").read_text()
 refresh = gamepad[gamepad.index("@MainActor private func refreshControllers() {"):]
 check(refresh.split("\n")[1].strip().startswith("guard !cloudHeld else { return }")
-      and gamepad.count("installHandler(on: profile)") == 2 and "profile.valueChangedHandler = {" in gamepad
-      and gamepad.count("valueChangedHandler = { [weak self]") == 1,
-      "XInput attaches nothing while held, and puts one and the same handler back on every pad after")
+      and "installHandler" not in gamepad and "profile.valueChangedHandler = {" in gamepad
+      and gamepad.count("valueChangedHandler = { [weak self]") == 1
+      and "for i in profiles.indices { if let profile = profiles[i] { attach(profile, slot: i) } }" in gamepad,
+      "XInput attaches nothing while held, and puts one and the same handler back on every pad after (BCD's attach)")
+# MCD (BCD 0.1.634): BCD's 2 s profile look waits while a stream holds the pads, on main and on the queue.
+recheck = gamepad[gamepad.index("@MainActor private func recheckProfiles() {"):]
+replace = gamepad[gamepad.index("private func replaceStaleProfiles("):]
+hold = gamepad[gamepad.index("@MainActor func setCloudHold(_ held: Bool) {"):gamepad.index("@MainActor private func refreshControllers() {")]
+check(recheck.split("\n")[1].strip().startswith("guard !cloudHeld else { return }")
+      and "guard !queueHeld else { return }" in replace.split("\n    }\n")[0]
+      and hold.index("queue.async { [self] in queueHeld = held }") < hold.index("refreshControllers()"),
+      "the profile look leaves a held pad alone, and the queue learns of the hold before the release's refresh")
 hardware = (app / "HardwareInput.swift").read_text()
 check(all(hardware[hardware.index(f"private func {f}("):].split("\n")[1].strip().startswith("guard !cloudHeld else { return }")
           for f in ("attachKeyboard", "attachMouse"))

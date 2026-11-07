@@ -26,6 +26,8 @@ struct BCDLibraryView: View {
     @State private var query = ""
     @FocusState private var typing: Bool
     @State private var opened: BCDGame?
+    /// The Steam Workshop area, open over the Library (BCDWorkshopView.swift).
+    @State private var workshop: BCDWorkshopRoute?
     @Environment(\.bcdMenu) private var menu
     @EnvironmentObject private var focus: BCDFocus
     /// MCD: the page shown and the controller's way through the cards and the toolbar.
@@ -53,6 +55,7 @@ struct BCDLibraryView: View {
             Group {
                 if let launcher { BCDLauncherPanel(spec: launcher) }   // a launcher's chip (Battle.net, EA app): its Install / Open card, no games
                 notices
+                itchTool   // BCD 0.1.634: itch.io's Find a game (on the toolbar's Left/Right walk, publishToolbar)
                 savesNotice
             }
             .padding(.horizontal, layout.gutter)
@@ -67,8 +70,11 @@ struct BCDLibraryView: View {
         .onChange(of: sortKey) { _, _ in nav.page = 0 }
         .onAppear { publishToolbar() }
         .onChange(of: availableFilters.map(\.rawValue)) { _, _ in publishToolbar() }
+        .onChange(of: workshopOffered) { _, _ in publishToolbar() }
+        .onChange(of: itchOffered) { _, _ in publishToolbar() }
         .padding(.top, 4)
         .bcdGamePage($opened, from: "Library")
+        .bcdWorkshop($workshop)
         // The game menu's "Game page" opens the page over the Library.
         .onAppear { menu?.openPage = { opened = $0 } }
         .onChange(of: searchRequest) { _, _ in toggleSearch() }
@@ -76,11 +82,18 @@ struct BCDLibraryView: View {
 
     // MARK: Filters and the row's buttons
 
+    /// The Workshop button: under the Steam chip, when the Workshop is part of this copy, BCD is signed in to Steam and a Steam game is installed.
+    private var workshopOffered: Bool {
+        filter == .store(.steam) && BCDWorkshopSource.backend?.available == true
+            && store.games.contains { $0.store == .steam && $0.state.isInstalled }
+    }
+
     /// The filters scroll sideways; Add a game, the order, Search and Refresh stay in sight at the end
     /// of the row (Add a game and the order as round buttons alone on an upright phone).
     private var filters: some View {
         HStack(spacing: 8) {
             chips
+            if workshopOffered { rowButton("library.workshop", "Workshop", "square.stack.3d.up", label: "Steam Workshop") { workshop = .area } }
             rowButton("library.add", "Add a game", "plus") { store.actions?.addGameFromFiles() }
             rowButton("library.sort", sort.title, "arrow.up.arrow.down", label: "Sort by: \(sort.title)") { showSortMenu() }
             round("library.search", searching ? "xmark" : "magnifyingglass", searching ? "Close the search" : "Search") { toggleSearch() }
@@ -252,6 +265,43 @@ struct BCDLibraryView: View {
         }
     }
 
+    /// Library › itch.io, signed in: Find a game, for a free game the account does not have yet (BCDActions.openStoreTool), and what an empty
+    /// itch.io list means. The Find a game screen itself belongs to the engine side (BCDLiveStore).
+    /// MCD: when itchTool shows its card (publishToolbar puts it on the controller's walk).
+    private var itchOffered: Bool {
+        filter == .store(.itch) && query.isEmpty && store.accounts.contains { $0.store == .itch && $0.name != nil }
+    }
+
+    @ViewBuilder private var itchTool: some View {
+        if itchOffered {
+            Button { store.actions?.openStoreTool(.itch) } label: {
+                HStack(spacing: 14) {
+                    Image(systemName: "magnifyingglass.circle.fill").font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(BCDStyle.lavender)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Find a game on itch.io").font(BCDStyle.heading(17))
+                        Text("Search itch.io or paste a game's link, add a free game to this library and install it here.")
+                            .font(BCDStyle.body(14)).foregroundStyle(BCDStyle.textSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .bold)).foregroundStyle(BCDStyle.textSoft)
+                }
+                .padding(16)
+                .frame(maxWidth: 620, alignment: .leading)
+                .background(BCDStyle.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(BCDStyle.glow, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .bcdFocusable("library.itch.find", cornerRadius: 18) { store.actions?.openStoreTool(.itch) }
+            if store.count(.itch) == 0 {
+                Text("No Windows games yet. Games you buy or claim on itch.io show here, and so do the games in your itch.io collections. Refresh reads the account's list again.")
+                    .font(BCDStyle.body(14)).foregroundStyle(BCDStyle.textSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     /// Games whose Steam Cloud saves differ from this device's, one line each as the classic library's
     /// Steam section said it: nothing is replaced until the player picks the copies to keep on the game's page.
     @ViewBuilder private var savesNotice: some View {
@@ -410,10 +460,13 @@ struct BCDLibraryView: View {
         .accessibilityLabel(label)
     }
 
-    /// The toolbar in the order Left and Right walk it: every chip, then Add a game, the order, Search, Refresh.
+    /// The toolbar in the order Left and Right walk it: every chip, the Workshop when offered, then Add a game, the order,
+    /// Search, Refresh, and itch.io's Find a game when it is shown.
     private func publishToolbar() {
         nav.toolbar = availableFilters.map { "library.filter.\($0.rawValue)" }
+            + (workshopOffered ? ["library.workshop"] : [])   // BCD 0.1.634: the Steam Workshop, where the row draws it
             + ["library.add", "library.sort", "library.search", "library.refresh"]
+            + (itchOffered ? ["library.itch.find"] : [])     // BCD 0.1.634: itch.io's Find a game, under the row
         nav.toolbarHome = "library.filter.\(filter.rawValue)"
     }
 }
