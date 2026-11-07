@@ -54,6 +54,9 @@ import SwiftUI
             return MCDCloudService.Request(steamAppID: appID, title: game.title, store: "STEAM")
         case .epic: return MCDCloudService.Request(steamAppID: nil, title: game.title, store: "EPIC")
         case .gog: return MCDCloudService.Request(steamAppID: nil, title: game.title, store: "GOG")
+        // BCD 0.1.634's stores. By title among any store's versions: GeForce NOW has no itch.io versions, and its EA
+        // versions can't be kept to by name ("EA" is a substring of "STEAM" in entry(for:)'s match).
+        case .itch, .ea: return MCDCloudService.Request(steamAppID: nil, title: game.title, store: nil)
         case .local:
             return game.title == "Windows desktop" ? nil : MCDCloudService.Request(steamAppID: nil, title: game.title, store: nil)
         }
