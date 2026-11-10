@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Mobile Claw Deck (MCD), a fork of BCD (https://github.com/thebcd69/bcd-games) by ausfowler.
+#
+# MCD's pre-flight: every host check build-ipa.yml runs, in about a third of the time and with no
+# engine build, so a broken check shows up minutes after a push instead of an hour into a build
+# (and is not hidden by the continue-on-error the IPA build needs on this repository).
+# tools/mcd-preflight.py reads the checks from build-ipa.yml and compares the failures with
+# tests/mcd-known-failures.txt; with no such file it only reports. It builds and publishes nothing.
+name: MCD pre-flight
+
+on:
+  push:
+    branches: [clawdeck-ui]
+  workflow_dispatch:
+
+concurrency:
+  group: mcd-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    if: github.repository == 'ausfowler/bcd-games'
+    # The IPA build's runner, so the checks meet the same Xcode and Swift.
+    runs-on: xcode-27
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select newest Xcode
+        shell: bash
+        run: |
+          NEWEST=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$NEWEST" ]; then
+            sudo xcode-select -s "$NEWEST/Contents/Developer"
+            echo "::notice::selected $NEWEST"
+          fi
+          swiftc --version
+
+      - name: Host checks (share ${{ matrix.shard }} of 3)
+        run: python3 tools/mcd-preflight.py --shard ${{ matrix.shard }} --of 3 --out preflight-${{ matrix.shard }}.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preflight-${{ matrix.shard }}
+          path: preflight-${{ matrix.shard }}.json
+          retention-days: 14
+
+  summary:
+    needs: checks
+    if: always() && github.repository == 'ausfowler/bcd-games'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: preflight-*
+          merge-multiple: true
+
+      - name: Compare with tests/mcd-known-failures.txt
+        run: python3 tools/mcd-preflight.py --summary preflight-*.json

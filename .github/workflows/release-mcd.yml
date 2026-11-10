@@ -1,6 +1,11 @@
 # Mobile Claw Deck (MCD): publish a tested build as a GitHub release (added 2026-11-03).
 # Run by hand with the build run whose IPA was tested: the release gets that run's MCD IPA (renamed), a source archive of
 # that run's commit with every submodule at its pin (GPL: GitHub's own archives leave submodules out), and the notes file.
+# 2026-11-10: the published IPA carries no Microsoft binaries, as BCD's public one: the `public-ipa` job runs BCD's own
+# tools/make-alpha-ipa.py on the tested IPA (drops the Visual C++ runtime DLLs, which Microsoft's licence lets only licensed
+# Visual Studio users redistribute, refuses any other Microsoft-signed Windows file, re-seals ad-hoc with the sideload
+# entitlements). MCD downloads that runtime from Microsoft on the device (setup, Settings), as BCD does.
+# dry_run: everything but the release; the files stay as this run's artifact "release-preview".
 name: Release MCD
 
 on:
@@ -25,13 +30,67 @@ on:
         description: "Mark as a pre-release"
         type: boolean
         default: true
+      dry_run:
+        description: "Make the files but publish nothing (they stay as this run's artifact)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
   actions: read
 
 jobs:
+  public-ipa:
+    if: github.repository == 'ausfowler/bcd-games'
+    # make-alpha-ipa.py re-seals with codesign and ditto: macOS.
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The tool, and the entitlements it re-seals with (app/Madeira/Sideload.entitlements and the extensions').
+          path: tools-src
+          persist-credentials: false
+
+      - name: The tested IPA
+        uses: actions/download-artifact@v4
+        with:
+          pattern: BCD-unsigned-*
+          merge-multiple: true
+          path: ipa
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Leave out Microsoft's files, re-seal
+        env:
+          NEEDLES: ${{ secrets.MCD_IPA_NEEDLES }}
+        run: |
+          set -euo pipefail
+          ipa=$(ls ipa/Madeira-*-unsigned.ipa)
+          [ "$(wc -l <<<"$ipa")" = 1 ] || { echo "::error::expected one Madeira IPA, found: $ipa"; exit 1; }
+          # The personal-strings scan: the repository secret MCD_IPA_NEEDLES (one string per line), if set.
+          # The tool needs at least one line; without the secret, a marker no file holds.
+          if [ -n "${NEEDLES}" ]; then printf '%s\n' "$NEEDLES" > needles.txt; else
+            echo "::notice::no MCD_IPA_NEEDLES secret: the personal-strings scan has nothing to look for"
+            echo "mcd-no-needles-configured-7c1e5a" > needles.txt; fi
+          python3 tools-src/tools/make-alpha-ipa.py "$ipa" public.ipa --needles needles.txt
+          rm -f needles.txt
+          python3 - <<'PY'
+          import zipfile
+          z = zipfile.ZipFile('public.ipa')
+          left = [n for n in z.namelist() if '/x86_64-vcruntime/' in n and n.lower().endswith('.dll')]
+          assert not left, left
+          print(f'public.ipa: {len(z.namelist())} files, no VC++ runtime DLL')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-ipa
+          path: public.ipa
+          retention-days: 7
+
   release:
+    needs: public-ipa
     if: github.repository == 'ausfowler/bcd-games'
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -56,14 +115,11 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "::notice::release of $sha (run $RUN_ID)"
 
-      - name: The tested IPA
+      - name: The tested IPA, without Microsoft's files
         uses: actions/download-artifact@v4
         with:
-          pattern: BCD-unsigned-*
-          merge-multiple: true
+          name: public-ipa
           path: ipa
-          run-id: ${{ inputs.run_id }}
-          github-token: ${{ github.token }}
 
       - name: The notes (from the branch the release is run on)
         uses: actions/checkout@v4
@@ -84,9 +140,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir out
-          ipa=$(ls ipa/Madeira-*-unsigned.ipa)
-          [ "$(wc -l <<<"$ipa")" = 1 ] || { echo "::error::expected one Madeira IPA, found: $ipa"; exit 1; }
-          cp "$ipa" "out/${NAME}.ipa"
+          cp ipa/public.ipa "out/${NAME}.ipa"
           # The source: the tree without git's own folders, under one top-level folder.
           XZ_OPT=-T0 tar --exclude-vcs --transform "s,^\.,${NAME}-source," -C src -cJf "out/${NAME}-source.tar.xz" .
           case "$NOTES" in release-notes/*.md) ;; *) echo "::error::notes must be a file under release-notes/"; exit 1 ;; esac
@@ -95,7 +149,18 @@ jobs:
           (cd out && sha256sum * | tee SHA256SUMS.txt)
           ls -la out
 
+      - name: Keep the files (dry run)
+        if: inputs.dry_run
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-preview
+          path: |
+            out/
+            notes.md
+          retention-days: 7
+
       - name: Publish
+        if: ${{ !inputs.dry_run }}
         run: |
           set -euo pipefail
           flag=""
