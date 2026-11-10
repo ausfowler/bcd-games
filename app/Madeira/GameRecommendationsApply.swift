@@ -39,7 +39,7 @@ extension GameRecommendations {
     /// The recommendation for a game in drive_c: a program, or a Steam game's install folder.
     /// A game Madeira has no list for gets the standard one; a path that names nothing, none.
     static func recommendation(windowsPath: String, steamAppID: Int?) -> GameRecommendation? {
-        if let rec = match(windowsPath: windowsPath, steamAppID: steamAppID, fileExists: driveFileExists) { return rec }
+        if let rec = match(windowsPath: windowsPath, steamAppID: steamAppID, fileExists: driveFileExists) { return MCDRules.adding(to: rec) }   // MCD: MCD's lines after BCD's (recommended/mcd-rules.json)
         let parts = windowsPath.replacingOccurrences(of: "/", with: "\\").split(separator: "\\")
         return parts.count > 1 ? standard : nil
     }

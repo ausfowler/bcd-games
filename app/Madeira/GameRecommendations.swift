@@ -54,7 +54,7 @@ struct GameRecommendation: Equatable {
     /// Raised whenever `config` or a switch changes.
     let version: Int
     /// The game's own config file, bcd.cfg syntax.
-    let config: String
+    var config: String   // MCD: var, so MCDRules.adding(to:) can add MCD's lines to a copy
     var avx: Bool? = nil
     var nvidia: Bool? = nil
     var wineVCRT: Bool? = nil

@@ -6571,19 +6571,15 @@
     {
       "id": "valheim",
       "title": "Valheim",
-      "version": 2,
+      "version": 1,
       "match": {"steamAppIDs": [892970], "steamFolders": ["valheim"], "programs": [{"name": "valheim.exe"}]},
       "config": [
         "# BCD's recommended settings for Valheim.",
         "# Reset to Recommended, at the bottom of the game's settings, brings them back.",
         "env.MADEIRA_EC_HOOK_TRACE = 0",
-        {"line": "env.MADEIRA_MZ_VIEW_CHECK = 1", "minBuild": 624},
-        "env.MADEIRA_PAD_MODE = dualsense"
+        {"line": "env.MADEIRA_MZ_VIEW_CHECK = 1", "minBuild": 624}
       ],
       "notes": [
-        "Version 2 (fork ausfowler/bcd-games, 2026-10-31): player 1 as a HID DualSense too. In XInput mode Valheim never sees a controller",
-        "(a Razer Kishi Ultra on iPhone19,4 / iOS 27.2: UnityPlayer, dinput8, HID and Steam's CSteamController HID thread loaded); with",
-        "env.MADEIRA_PAD_MODE = dualsense it works, tested by the owner of that device.",
         "Valheim (Unity Mono), Send Log FWK09J (iPhone18,1, build 623's engine): Mono's next 64 KB RWX code chunk started in the slack behind a",
         "plain-file .NET assembly view, got no store alias, and Mono's first store into it faulted ([store-noalias] #1); FEX then leaked its lock",
         "([fexlock] STUCK) and the game froze before its first frame. env.MADEIRA_MZ_VIEW_CHECK = 1 (build 624) handles such a chunk as ordinary",

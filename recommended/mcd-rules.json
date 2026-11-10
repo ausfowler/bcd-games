@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "version": 1,
+  "about": "Mobile Claw Deck's own lines, added after BCD's rule of the same id (app/Madeira/MCDRules.swift). BCD's recommendations.json stays byte for byte as BCD signed it; tests/host/check-mcd-rules.py checks both files.",
+  "add": [
+    {
+      "id": "valheim",
+      "lines": ["env.MADEIRA_PAD_MODE = dualsense"],
+      "note": "2026-10-31, iPhone19,4 / iOS 27.2, Razer Kishi Ultra: in XInput mode Valheim never sees a controller (UnityPlayer, dinput8, HID and Steam's CSteamController HID thread loaded); as a HID DualSense it works. Tested by MCD's owner."
+    }
+  ]
+}

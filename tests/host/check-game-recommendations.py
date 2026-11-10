@@ -726,8 +726,6 @@ _r620 = {
     'resident-evil-3': ['env.MADEIRA_WG_64BIT = 1', 'env.MADEIRA_OPTIN_DLLS = mfasfsrcsnk,wmvdecod,wmadmod'],
     'marvel-cosmic-invasion': ['env.MADEIRA_WGI_HOST_PADS = 1'],
     'haste': ['env.MADEIRA_WGI_HOST_PADS = 1', 'dxmt = d3d11.mipClampBC=1'],
-    # fork: Valheim v2 is upstream's round-626 rule (FWK09J) plus the fork's controller line
-    'valheim': ['env.MADEIRA_MZ_VIEW_CHECK = 1', 'env.MADEIRA_PAD_MODE = dualsense'],
     'big-walk': ['env.MADEIRA_REAL_SUSPEND = 1'],
     'ball-x-pit': ['env.MADEIRA_REAL_SUSPEND = 1'],
     'just-volleyball-demo': ['d3d12-typed-uav-load = 1'],
@@ -746,7 +744,7 @@ _r620['slay-the-spire-2'] = _r620['slay-the-spire-2'] + ['env.DOTNET_EnableWrite
 # 2026-11-01 (58D8SD build 626, 1R1NCG build 625): v5 gives the game its own keyed event (RtlRunOnceComplete, Control's line) from build 624,
 # the build whose list policy takes the key.
 _r620['slay-the-spire-2'] = _r620['slay-the-spire-2'] + ['env.MADEIRA_KEYED_EVENT_PER_PROCESS = 1']
-_r620_v = {'slay-the-spire-2': 5, 'far-cry-3': 2, 'marvel-cosmic-invasion': 2, 'valheim': 2}   # fork: valheim v2 (the controller line)
+_r620_v = {'slay-the-spire-2': 5, 'far-cry-3': 2, 'marvel-cosmic-invasion': 2}
 for _id, _lines in _r620.items():
     assert presets[_id]['version'] == _r620_v.get(_id, 1) and presets[_id]['lines'][2:] == ['env.MADEIRA_EC_HOOK_TRACE = 0'] + _lines, (_id, presets[_id])
 assert presets['slay-the-spire-2']['line_builds'][-7:] == [(576, 1000000000), (624, 1000000000), (624, 1000000000), (624, 1000000000),
@@ -1422,7 +1420,7 @@ assert 'guard mark != stamp(rec), mark.hasSuffix("#" + fileHash(text)) else { re
 assert '!(text + (ownLines ?? "")).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty' in due and 'setMark("", windowsPath)' in due
 # The standard list for every game but the Desktop, and later a game's own list over it as on first sight.
 fallback = block(apply_src, '    static func recommendation(windowsPath: String, steamAppID: Int?) -> GameRecommendation? {', '\n    }\n')
-assert 'if let rec = match(windowsPath: windowsPath, steamAppID: steamAppID, fileExists: driveFileExists) { return rec }' in fallback
+assert 'if let rec = match(windowsPath: windowsPath, steamAppID: steamAppID, fileExists: driveFileExists) { return MCDRules.adding(to: rec) }' in fallback   # MCD: MCD's lines (check-mcd-rules.py)
 assert 'return parts.count > 1 ? standard : nil' in fallback
 assert 'let fromStandard = mark.hasPrefix(standardID + "#") && rec.id != standardID' in due
 assert 'static let standardID = "standard"' in lists_src
@@ -2154,7 +2152,7 @@ with tempfile.TemporaryDirectory(prefix='madeira-recommended-') as directory:
         binary = temporary / 'recommended'
         subprocess.run([compiler] + [str(app / name) for name in ('GameRecommendations.swift', 'GameRecommendationsList.swift',
                                                                   'GameRecommendationsSource.swift', 'GameRecommendationsApply.swift',
-                                                                  'ConfigCatalog.generated.swift')]
+                                                                  'ConfigCatalog.generated.swift', 'MCDRules.swift')]   # MCD: the apply hook's MCDRules
                        + [str(temporary / 'Stubs.swift'), str(temporary / 'main.swift'), '-o', str(binary)], check=True)
         env = dict(os.environ, MADEIRA_TEST_DRIVE=str(temporary / 'drive'), MADEIRA_TEST_CONFIGS=str(temporary / 'configs'),
                    BCD_TEST_RECOMMENDATIONS=str(recs_path), BCD_TEST_RECS_DIR=str(temporary / 'recs'))
