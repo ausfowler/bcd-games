@@ -118,6 +118,9 @@ BCD_PATCHES=("patch-dxmt-copy-structure-count.py" "[copy-structure-count] skippe
              "patch-dxmt-srv-getdesc-mips.py" "[srv-getdesc] madeira-bcd #"
              "patch-dxmt-d11-query-stuck.py" "[query-stuck] madeira-bcd query="
              "patch-dxmt-tess-pso-failed.py" "[mesh-skip] ml870 ")
+# MCD (Mobile Claw Deck): its own DXMT patches, on the same copy and checked the same way (the marker in the result, none in the
+# unpatched build). tools/patch-mcd-dxmt-latency.py: MADEIRA_DXMT_MAX_LATENCY, how many frames a game may run ahead (unset: DXMT's).
+BCD_PATCHES+=("patch-mcd-dxmt-latency.py" "[mcd-latency] MCD MADEIRA_DXMT_MAX_LATENCY=")
 SHIP_HAS_BCD=1
 for ((i = 1; i < ${#BCD_PATCHES[@]}; i += 2)); do
     LC_ALL=C grep -aqF "${BCD_PATCHES[$i]}" "$SHIP/d3d11.dll" || SHIP_HAS_BCD=0
